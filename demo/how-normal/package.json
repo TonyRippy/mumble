@@ -1,0 +1,19 @@
+{
+  "name": "how-normal",
+  "version": "0.0.0",
+  "description": "A simple tool to test how normal your data really is.",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack"
+  },
+  "dependencies": {
+    "npm": "^8.19.2"
+  },
+  "devDependencies": {
+    "ts-loader": "^9.4.1",
+    "typescript": "^4.8.4",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.0"
+  }
+}
