@@ -102,7 +102,7 @@ class KSPlot {
     this.draw();
   }
   
-  private recalculate() {
+  public recalculate() {
     let w = this.canvas.width - XMARGIN;
     let h = this.canvas.height - YMARGIN;
     this.selection = null;
@@ -267,6 +267,8 @@ class App {
     let gamma = Number(this.gamma.value) / 10.0;
     console.log("gamma = " + gamma);
     this.ksPlot.setGamma(gamma);
+    this.ksPlot.recalculate();
+    this.ksPlot.draw();
   }
 
   private onMouseDown(e: MouseEvent): void {
