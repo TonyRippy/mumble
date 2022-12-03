@@ -90,7 +90,15 @@ class KSPlot {
     if (this.best != null) {
       return this.best;
     }
-    return this.cdfFactory(this.mean, this.stddev);
+    let cdf = this.cdfFactory(this.mean, this.stddev);
+    return {
+      cx: (this.canvas.width - XMARGIN) / 2,
+      cy: (this.canvas.height - YMARGIN) / 2,
+      mean: this.mean,
+      stddev: this.stddev,
+      cdf: cdf,
+      p: this.test(cdf),
+    };
   }
   
   public setSelection(e: MouseEvent): KSPoint {
