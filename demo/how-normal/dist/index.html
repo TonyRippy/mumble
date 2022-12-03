@@ -30,6 +30,22 @@
     </style>
   </head>
   <body>
+    <div class="common">
+      <label for="distype">Distribution type:</label>
+      <select id="distype">
+        <option value="normal">Normal</option>
+        <option value="lognormal">LogNormal</option>
+      </select>
+      <br/>
+      You data does not leave your local machine.
+      <br/>
+      The results below are computed locally in your browser using Javascript.
+      <br/>
+      <div class="slidecontainer">
+        <label for="gamma">Gamma:</label>
+        <input type="range" min="1" max="120" value="65" class="slider" id="gamma">
+      </div>
+    </div>
     <div class="prom">
      <label for="pronaddr">Prometheus address:</label>
      <input type="url" id="promaddr" value="http://localhost:9090">
@@ -53,22 +69,6 @@
       <label for="data">Paste your data here:</label>
       <br/>
       <textarea id="data" rows="4" cols="50">1 2 3 4 5 6</textarea>
-    </div>
-    <div class="common">
-      <label for="distype">Distribution type:</label>
-      <select id="distype">
-        <option value="normal">Normal</option>
-        <option value="lognormal">LogNormal</option>
-      </select>
-      <br/>
-      You data does not leave your local machine.
-      <br/>
-      The results below are computed locally in your browser using Javascript.
-      <br/>
-      <div class="slidecontainer">
-        <label for="gamma">Gamma:</label>
-        <input type="range" min="1" max="120" value="65" class="slider" id="gamma">
-      </div>
       <br/>
       <a id="run" href="#">Click here</a> to analyze the data.
     </div>
