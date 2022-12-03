@@ -37,7 +37,7 @@ function cdf(x: number): number {
 }
 
 // See: https://en.wikipedia.org/wiki/Normal_distribution
-export class Normal implements CDF {
+class _Normal implements CDF {
   constructor(public mean: number, public stddev: number) {
   }
 
@@ -54,8 +54,12 @@ export class Normal implements CDF {
   }
 }
 
+export function Normal(mean: number, stddev: number): CDF {
+  return new _Normal(mean, stddev);
+}
+
 // See: https://en.wikipedia.org/wiki/Log-normal_distribution
-export class LogNormal implements CDF {
+class _LogNormal implements CDF {
   private mean: number;
   private stddev: number;
   
@@ -81,4 +85,29 @@ export class LogNormal implements CDF {
   public toHTML(): string {
     return 'LogNormal(&mu; = ' + this.mean + ', &sigma; = ' + this.stddev + ')';
   }
+}
+
+// A special case fo handling case where mean is zero.
+class _LogZero implements CDF {
+  
+  constructor() {}
+  
+  public p(x: number): number {
+	  return 0;
+  }
+
+  public dx(x: number): number {
+	  return 0;
+  }
+
+  public toHTML(): string {
+    return 'LogNormal(&mu; = &infin;, &sigma; = -&infin;)';
+  }
+}
+
+export function LogNormal(mean: number, stddev: number): CDF {
+  if (mean <= 0) {
+    return new _LogZero();
+  }
+  return new _LogNormal(mean, stddev);
 }

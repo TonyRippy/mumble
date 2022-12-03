@@ -1,3 +1,4 @@
+import { PrometheusDriver, SampleValue } from 'prometheus-query';
 import { Func, linearFunction, ECDF, getRenderFuncForPlot, getRenderFuncForFunction, Layer, CDFGraph } from "./ecdf";
 import { CDF } from "./cdf";
 import { Normal, LogNormal } from "./gaussian";
@@ -23,6 +24,19 @@ function resizeCanvasToDisplaySize(canvas) {
   return needResize;
 }
 
+function getCdfFactory() {
+  let distSelect = <HTMLSelectElement>document.getElementById('distype')
+  let index = distSelect.selectedIndex;
+  console.log(index);
+  if (index == 0) {
+    return Normal;
+  }
+  if (index == 1) {
+    return LogNormal;
+  }
+  throw new Error("Unrecognized distribution type.");
+}
+
 //const ITERATIONS_PER_ROUND = 100;
 //const MAX_ROUNDS = 50;
 
@@ -42,9 +56,7 @@ interface KSPoint {
 class KSPlot {
   private cx2fx: Func;
   private cy2fy: Func;
-  public dist: (x: number, y: number) => CDF;
-  public test: (cdf: CDF) => number;
-  private gamma: number;
+  private test: (cdf: CDF) => number;
   private maxp: number;
   private imageData: ImageData;
   private best: KSPoint;
@@ -53,12 +65,12 @@ class KSPlot {
   constructor(private canvas: HTMLCanvasElement,
               private mean: number, private stddev: number,
               sample: number[],
-              public distribution: (x: number, y: number) => CDF) {
+              private cdfFactory: (x: number, y: number) => CDF,
+              private gamma: number = 6.5) {
     this.test = (cdf: CDF) => {
       return KSTest(cdf, sample);
     };
     this.canvas = <HTMLCanvasElement>document.getElementById('plot');
-    this.gamma = 6.5;
     this.best = null;
     this.selection = null;
     this.onResize();    
@@ -75,7 +87,10 @@ class KSPlot {
     if (this.selection != null) {
       return this.selection;
     }
-    return this.best;
+    if (this.best != null) {
+      return this.best;
+    }
+    return this.cdfFactory(this.mean, this.stddev);
   }
   
   public setSelection(e: MouseEvent): KSPoint {
@@ -84,7 +99,7 @@ class KSPlot {
     let cy = e.offsetY * dpr;
     let mean = this.cx2fx.eval(cx - XMARGIN);
     let stddev = Math.max(this.cy2fy.eval(cy), 0);
-    let cdf = this.distribution(mean, stddev);
+    let cdf = this.cdfFactory(mean, stddev);
     this.selection = {
       cx: cx,
       cy: cy,
@@ -113,7 +128,7 @@ class KSPlot {
       let i = cy * w * 4;
       for (let cx = 0; cx < w; cx++) {
         let fx = this.cx2fx.eval(cx);
-        let cdf = this.distribution(fx, fy);
+        let cdf = this.cdfFactory(fx, fy);
         let p = this.test(cdf);
         if (p > bestP) {
           bestP = p;
@@ -231,7 +246,6 @@ class KSPlot {
   }
 }
 
-
 class App {
   private sample: number[];
   private ecdf: ECDF;
@@ -259,14 +273,16 @@ class App {
     this.gamma.oninput = (e) => { this.onSlider(e); };
   }
 
+  private getGamma(): number {
+    return Number(this.gamma.value) / 10.0;
+  }
+  
   private onSlider(e: Event): void {
     console.log("on slider");
     if (this.ksPlot == null) {
       return;
     }
-    let gamma = Number(this.gamma.value) / 10.0;
-    console.log("gamma = " + gamma);
-    this.ksPlot.setGamma(gamma);
+    this.ksPlot.setGamma(this.getGamma());
     this.ksPlot.recalculate();
     this.ksPlot.draw();
   }
@@ -331,8 +347,8 @@ class App {
     // Build the KS Plot
     let ksCanvas = <HTMLCanvasElement>document.getElementById('plot');
     resizeCanvasToDisplaySize(ksCanvas);
-    let ks = new KSPlot(ksCanvas, this.mean, this.stddev, sample,
-                        (mean: number, stddev: number) => { return new Normal(mean, stddev);});
+    let ks = new KSPlot(ksCanvas, this.mean, this.stddev, sample, getCdfFactory(), this.getGamma());
+                        
     ksCanvas.addEventListener('resize', function(e) {
       resizeCanvasToDisplaySize(ksCanvas);
       ks.onResize();
@@ -422,9 +438,51 @@ function parseData(str: String): number[] {
   return sample;
 }
 
-const link = document.getElementById('run');
+let link = document.getElementById('run');
 link.onclick = function() {
   let data = <HTMLTextAreaElement>document.getElementById('data');
   app.start(parseData(data.value));
+  return false;
+};
+
+let queryData = {};
+
+link = document.getElementById('promrun');
+link.onclick = function() {
+  const addr = <HTMLInputElement>document.getElementById('promaddr');
+  const prom = new PrometheusDriver({
+    endpoint: addr.value
+  });
+  const q = <HTMLTextAreaElement>document.getElementById('query');
+  const start = new Date().getTime() - 15 * 60 * 1000;
+  const end = new Date();
+  const step = 15; // seconds
+  prom.rangeQuery(q.value, start, end, step)
+    .then((res) => {
+      const table = <HTMLTableElement>document.getElementById('promresults');
+      // Remove any existing rows
+      while (table.tBodies.length > 0) {
+        table.removeChild(table.tBodies[0]);
+      }
+      const results = table.createTBody();      
+      const series = res.result;
+      series.forEach((s) => {
+        const row = results.insertRow();
+        const data: number[] = [];
+        s.values.forEach((sv: SampleValue, idx: number) => {
+          data.push(sv.value);
+        });
+        queryData[row.rowIndex] = data; 
+        let link = document.createElement('a');
+        link.href = '#';
+        link.text = s.metric.toString();
+        link.onclick = (_) => {
+          (<HTMLTextAreaElement>document.getElementById("data")).value = data.toString();
+          app.start(data);
+        };
+        row.insertCell(-1).append(link);
+      });
+    })
+    .catch(console.error);
   return false;
 };
