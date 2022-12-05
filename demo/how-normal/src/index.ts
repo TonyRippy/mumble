@@ -1,3 +1,8 @@
+import * as mdb from 'mdb-ui-kit';
+export default {
+  mdb,
+};
+
 import { PrometheusDriver, SampleValue } from 'prometheus-query';
 import { Func, linearFunction, ECDF, getRenderFuncForPlot, getRenderFuncForFunction, Layer, CDFGraph } from "./ecdf";
 import { CDF } from "./cdf";
@@ -10,7 +15,7 @@ function resizeCanvasToDisplaySize(canvas) {
   const dpr = window.devicePixelRatio;
   const displayWidth  = Math.floor(canvas.clientWidth * dpr);
   const displayHeight = Math.floor(canvas.clientHeight * dpr);
-  
+
   // Check if the canvas is not the same size.
   const needResize = canvas.width  !== displayWidth ||
     canvas.height !== displayHeight;
@@ -20,14 +25,13 @@ function resizeCanvasToDisplaySize(canvas) {
     canvas.width  = displayWidth;
     canvas.height = displayHeight;
   }
-  
+
   return needResize;
 }
 
 function getCdfFactory() {
   let distSelect = <HTMLSelectElement>document.getElementById('distype')
   let index = distSelect.selectedIndex;
-  console.log(index);
   if (index == 0) {
     return Normal;
   }
@@ -61,7 +65,7 @@ class KSPlot {
   private imageData: ImageData;
   private best: KSPoint;
   private selection: KSPoint;
-  
+
   constructor(private canvas: HTMLCanvasElement,
               private mean: number, private stddev: number,
               sample: number[],
@@ -73,7 +77,7 @@ class KSPlot {
     this.canvas = <HTMLCanvasElement>document.getElementById('plot');
     this.best = null;
     this.selection = null;
-    this.onResize();    
+    this.onResize();
   }
 
   public onResize() {
@@ -100,7 +104,7 @@ class KSPlot {
       p: this.test(cdf),
     };
   }
-  
+
   public setSelection(e: MouseEvent): KSPoint {
     const dpr = window.devicePixelRatio;
     let cx = e.offsetX * dpr;
@@ -119,12 +123,19 @@ class KSPlot {
     this.draw();
     return this.selection;
   }
-  
-  public setGamma(gamma: number): void {
-    this.gamma = gamma;
+
+  public setCdfFactory(cdfFactory: (x: number, y: number) => CDF): void {
+    this.cdfFactory = cdfFactory;
+    this.recalculate();
     this.draw();
   }
-  
+
+  public setGamma(gamma: number): void {
+    this.gamma = gamma;
+    this.recalculate();
+    this.draw();
+  }
+
   public recalculate() {
     let w = this.canvas.width - XMARGIN;
     let h = this.canvas.height - YMARGIN;
@@ -180,8 +191,8 @@ class KSPlot {
 
     const space = 5;
     const tickLength = 10;
-    
-    // Draw Y axis    
+
+    // Draw Y axis
     ctx.beginPath();
     let x1 = XMARGIN - tickLength - 0.5;
     let x2 = XMARGIN - 0.5;
@@ -199,9 +210,9 @@ class KSPlot {
 
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
-    ctx.fillText(yLabel2, XMARGIN - tickLength - space, 0); 
+    ctx.fillText(yLabel2, XMARGIN - tickLength - space, 0);
     ctx.textBaseline = 'middle';
-    ctx.fillText(yLabel, XMARGIN - tickLength - space, y1); 
+    ctx.fillText(yLabel, XMARGIN - tickLength - space, y1);
     ctx.fillText(origin, XMARGIN - tickLength - space, y2);
 
     // Draw X axis
@@ -260,9 +271,9 @@ class App {
   private mean: number;
   private stddev: number;
   private ksPlot: KSPlot;
-  private cdfGraph: CDFGraph;  
+  private cdfGraph: CDFGraph;
   private gamma: HTMLInputElement;
-  
+
   constructor() {
     let cdf = <HTMLCanvasElement>document.getElementById('cdf')
     resizeCanvasToDisplaySize(cdf);
@@ -279,35 +290,39 @@ class App {
     this.sample = [];
     this.gamma = <HTMLInputElement>document.getElementById('gamma');
     this.gamma.oninput = (e) => { this.onSlider(e); };
+    (<HTMLSelectElement>document.getElementById('distype')).onchange = (e) => { this.onDistType(); };
   }
 
   private getGamma(): number {
-    return Number(this.gamma.value) / 10.0;
+    return Number(this.gamma.value);
   }
-  
-  private onSlider(e: Event): void {
-    console.log("on slider");
+
+  private onDistType(): void {
     if (this.ksPlot == null) {
       return;
     }
+    this.ksPlot.setCdfFactory(getCdfFactory());
+  }
+
+  private onSlider(e: Event): void {
+     if (this.ksPlot == null) {
+      return;
+     }
     this.ksPlot.setGamma(this.getGamma());
-    this.ksPlot.recalculate();
-    this.ksPlot.draw();
   }
 
   private onMouseDown(e: MouseEvent): void {
     this.onMouseMove(e);
   }
-  
+
   private onMouseMove(e: MouseEvent): void {
     if (e.buttons == 0) {
       return;
     }
     // Pick new distribution
     let select = this.ksPlot.setSelection(e);
-    console.log("New mean=" + select.mean + ", stddev=" + select.stddev);
     const g = select.cdf;
-    
+
     let txt = document.getElementById('cdf-text');
     txt.innerHTML = g.toHTML() +
       '<br>' +
@@ -344,7 +359,7 @@ class App {
       this.ecdf.addSample(sample[i]);
     };
     this.mean = this.ecdf.mean();
-    this.stddev = this.ecdf.stddev(this.mean); 
+    this.stddev = this.ecdf.stddev(this.mean);
 
     let txt = document.getElementById('plot-text');
     txt.innerHTML =
@@ -356,7 +371,7 @@ class App {
     let ksCanvas = <HTMLCanvasElement>document.getElementById('plot');
     resizeCanvasToDisplaySize(ksCanvas);
     let ks = new KSPlot(ksCanvas, this.mean, this.stddev, sample, getCdfFactory(), this.getGamma());
-                        
+
     ksCanvas.addEventListener('resize', function(e) {
       resizeCanvasToDisplaySize(ksCanvas);
       ks.onResize();
@@ -408,7 +423,7 @@ class App {
         b: 255,
         a: 128,
       });
-    
+
     let g = select.cdf;
     graph.layers[1] = new Layer(
       getRenderFuncForFunction(
@@ -430,7 +445,7 @@ class App {
       });
     graph.draw();
   }
-}  
+}
 
 const app = new App();
 
@@ -446,7 +461,7 @@ function parseData(str: String): number[] {
   return sample;
 }
 
-let link = document.getElementById('run');
+let link = document.getElementById('run-raw-data');
 link.onclick = function() {
   let data = <HTMLTextAreaElement>document.getElementById('data');
   app.start(parseData(data.value));
@@ -455,6 +470,22 @@ link.onclick = function() {
 
 let queryData = {};
 
+
+// Init prometheus query dates.
+function initQuery() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  let start = new Date();
+  start.setTime(now.getTime() - 15 * 60 * 1000);
+  let i = <HTMLInputElement>document.getElementById('query-start');
+  let v = start.toISOString().slice(0,16);
+  i.value = v;
+  i = <HTMLInputElement>document.getElementById('query-end');
+  v = now.toISOString().slice(0,16);
+  i.value = v;
+}
+initQuery();
+
 link = document.getElementById('promrun');
 link.onclick = function() {
   const addr = <HTMLInputElement>document.getElementById('promaddr');
@@ -462,8 +493,10 @@ link.onclick = function() {
     endpoint: addr.value
   });
   const q = <HTMLTextAreaElement>document.getElementById('query');
-  const start = new Date().getTime() - 15 * 60 * 1000;
-  const end = new Date();
+  const start = Date.parse(
+    (<HTMLInputElement>document.getElementById('query-start')).value);
+  const end = Date.parse(
+    (<HTMLInputElement>document.getElementById('query-end')).value);
   const step = 15; // seconds
   prom.rangeQuery(q.value, start, end, step)
     .then((res) => {
@@ -472,7 +505,7 @@ link.onclick = function() {
       while (table.tBodies.length > 0) {
         table.removeChild(table.tBodies[0]);
       }
-      const results = table.createTBody();      
+      const results = table.createTBody();
       const series = res.result;
       series.forEach((s) => {
         const row = results.insertRow();
@@ -480,13 +513,14 @@ link.onclick = function() {
         s.values.forEach((sv: SampleValue, idx: number) => {
           data.push(sv.value);
         });
-        queryData[row.rowIndex] = data; 
+        queryData[row.rowIndex] = data;
         let link = document.createElement('a');
         link.href = '#';
         link.text = s.metric.toString();
         link.onclick = (_) => {
           (<HTMLTextAreaElement>document.getElementById("data")).value = data.toString();
           app.start(data);
+          return false;
         };
         row.insertCell(-1).append(link);
       });

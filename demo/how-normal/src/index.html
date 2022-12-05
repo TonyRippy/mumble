@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta http-equiv="content-language" content="en-US">
+    <title>How Normal Is Your Data?</title>
+    <link rel="shortcut icon" type="image/png" href="img/favicon.png">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+    />
+    <link rel="stylesheet" href="css/index.min.css" />
+    <style type="text/css">
+      #plot {
+          /* border: solid 1px black; */
+          width: 100%;
+      }
+      #cdf {
+          border: solid 1px blue;
+          width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <div class="row">
+      <div class="accordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="heading-data-source">
+            <button
+              class="accordion-button"
+              type="button"
+              data-mdb-toggle="collapse"
+              data-mdb-target="#collapse-data-source"
+              aria-expanded="true"
+              aria-controls="collapse-data-source"
+              >
+              Data Source
+            </button>
+          </h2>
+          <div id="collapse-data-source"
+               class="accordion-collapse collapse show"
+               aria-labelledby="heading-data-source">
+            <div class="accordion-body">
+              <div class="row">
+                <p>
+                  This data does not leave your local machine.
+                  <br/>
+                  The results below are computed locally in your browser using Javascript.
+                </p>
+              </div>
+              <div class="row">
+                <div class="col-2">
+                  <div class="list-group list-group-light" id="list-tab" role="tablist">
+                    <a class="list-group-item list-group-item-action active px-3 border-0"
+                       id="list-home-list"
+                       data-mdb-toggle="list"
+                       href="#list-home"
+                       role="tab"
+                       aria-controls="list-home">Raw Data</a>
+                    <a class="list-group-item list-group-item-action px-3 border-0"
+                       id="list-profile-list"
+                       data-mdb-toggle="list"
+                       href="#list-profile"
+                       role="tab"
+                       aria-controls="list-profile">Prometheus</a>
+                  </div>
+                </div>
+                <div class="col-10">
+                  <div class="tab-content" id="nav-tabContent">
+                    <div class="tab-pane fade show active" id="list-home" role="tabpanel"
+                         aria-labelledby="list-home-list">
+                      <label for="data">Paste your data here:</label>
+                      <br/>
+                      <textarea class="form-control" id="data">1 2 3 4 5 6</textarea>
+                      <br/>
+                      <button id="run-raw-data"
+                              type="button"
+                              class="btn btn-primary btn-rounded">
+                        Update
+                      </button>
+                    </div>
+                    <div class="tab-pane fade" id="list-profile" role="tabpanel" aria-labelledby="list-profile-list">
+                      <label for="promaddr">Prometheus address:</label>
+                      <input class="form-control" type="url" id="promaddr" value="http://localhost:9090">
+                      <br/>
+                      <label for="query">Query:</label>
+                      <br/>
+                      <textarea id="query" class="form-control">sum by (job, mode) (rate(node_cpu_seconds_total[1m]))</textarea>
+                      <br/>
+                      <div class="row">
+                        <div class="col-4">
+                          <label for="query-start" class="form-label">Start:</label>
+                          <input id="query-start" class="form-control" type="datetime-local"/>
+                        </div>
+                        <div class="col-4">
+                          <label for="query-end" class="form-label">End:</label>
+                          <input id="query-end" class="form-control" type="datetime-local"/>
+                        </div>
+                      </div>
+                      <br/>
+                      <button id="promrun"
+                              type="button"
+                              class="btn btn-primary btn-rounded">
+                        Run Query
+                      </button>
+                      <table id="promresults" class="mt-4">
+                        <!--
+                        <thead>
+                          <tr>
+                            <th>Series</th>
+                          </tr>
+                        </thead>
+                        -->
+                        <tbody>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="heading-graph-options">
+            <button
+              class="accordion-button"
+              type="button"
+              data-mdb-toggle="collapse"
+              data-mdb-target="#collapse-graph-options"
+              aria-expanded="true"
+              aria-controls="collapse-graph-options"
+              >
+              Graph Options
+            </button>
+          </h2>
+          <div id="collapse-graph-options"
+               class="accordion-collapse collapse show"
+               aria-labelledby="heading-graph-options">
+            <div class="accordion-body">
+              <label for="distype">Distribution type:</label>
+              <select id="distype" class="form-control">
+                <option value="normal">Normal</option>
+                <option value="lognormal">LogNormal</option>
+              </select>
+              <br/>
+              <div class="slidecontainer">
+                <label for="gamma" class="form-label">Gamma:</label>
+                <div class="range">
+                  <input id="gamma" class="form-range" type="range" min="0.1" max="20" step="0.1" value="6.5" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+      <div class="row mt-4">
+        <div id="plot-container" class="col-md">
+          <canvas id="plot"></canvas>
+          <p id="plot-text"></p>
+        </div>
+        <div id="cdf-container" class="col-md">
+          <canvas id="cdf"></canvas>
+          <p id="cdf-text"></p>
+        </div>
+      </div>
+
+      </div>
+    </div>
+  </body>
+  <script type="text/javascript" src="js/index.min.js"></script>
+</html>
