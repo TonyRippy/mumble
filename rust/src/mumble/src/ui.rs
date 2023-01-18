@@ -13,5 +13,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub const INDEX_HTML: &[u8] = include_bytes!("../ui/dist/index.html");
-pub const INDEX_JS: &[u8] = include_bytes!("../ui/dist/main.min.js");
+use http::{Request, Response, StatusCode};
+use std::convert::Infallible;
+
+const INDEX_HTML: &str = include_str!("../ui/dist/index.html");
+const INDEX_JS: &str = include_str!("../ui/dist/main.min.js");
+
+pub async fn serve<R>(req: Request<R>) -> Result<Response<String>, Infallible> {
+    let mut response = Response::default();
+    match req.uri().query() {
+        None => {
+            *response.body_mut() = INDEX_HTML.to_string();
+        }
+        Some(qs) => {
+            if qs == "js" {
+                *response.body_mut() = INDEX_JS.to_string();
+            } else {
+                *response.status_mut() = StatusCode::NOT_FOUND;
+            }
+        }
+    };
+    Ok(response)
+}

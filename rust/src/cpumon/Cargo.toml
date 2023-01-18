@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hyper = {git = "https://github.com/hyperium/hyper", tag="v1.0.0-rc.2", features=["server", "http1"]}
 mumble = { path = "../mumble" }
 num-rational = "0.4.1"
 procfs = "0.14"
-tokio = {version="1.22", features=["macros", "rt", "time"]}
+tokio = {version="1", features=["macros", "net", "rt", "signal", "time"]}
