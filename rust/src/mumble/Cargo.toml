@@ -8,5 +8,8 @@ edition = "2021"
 [dependencies]
 num-traits = "0.2"
 
+[build-dependencies]
+npm_rs = "1.0.0"
+
 [dev-dependencies]
 more-asserts = "0.2"

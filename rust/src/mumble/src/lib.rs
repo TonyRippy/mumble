@@ -18,6 +18,8 @@
 #[macro_use]
 extern crate more_asserts;
 
+pub mod ui;
+
 use num_traits::cast::ToPrimitive;
 use num_traits::Num;
 
