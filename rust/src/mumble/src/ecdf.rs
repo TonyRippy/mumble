@@ -1,4 +1,4 @@
-// A library for publishing ECDFs of a gauge metric.
+// Tools for collecting Emperical Cumulative Distribution Functions. (ECDFs)
 // Copyright (C) 2022, Tony Rippy
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(test)]
-#[macro_use]
-extern crate more_asserts;
-
-pub mod ui;
-
 use num_traits::cast::ToPrimitive;
 use num_traits::Num;
-
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::From;
 use std::fmt::Debug;
@@ -39,6 +33,11 @@ impl<V> ECDF<V>
 where
     V: Num + ToPrimitive + PartialOrd + Copy + Debug,
 {
+    /// Removes all samples collected so far.
+    pub fn clear(&mut self) {
+        self.samples.clear()
+    }
+
     /// The total number of observations used to construct this ECDF.
     pub fn total(&self) -> SampleCount {
         let mut sum: SampleCount = 0;
@@ -208,6 +207,32 @@ where
 
     pub fn observe(&mut self, sample: V) {
         self.add(sample, 1)
+    }
+}
+
+impl<V> Serialize for ECDF<V>
+where
+    V: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.samples.serialize(serializer)
+    }
+}
+
+impl<'de, V> Deserialize<'de> for ECDF<V>
+where
+    V: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(ECDF::<V> {
+            samples: Vec::deserialize::<D>(deserializer)?,
+        })
     }
 }
 

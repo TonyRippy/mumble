@@ -15,9 +15,8 @@
 // limitations under the License.
 
 use hyper::{server::conn::http1, service::service_fn};
+use mumble::ecdf::ECDF;
 use mumble::ui;
-use mumble::ECDF;
-use num_rational::Ratio;
 use procfs::process::{Process, Stat};
 use procfs::{CpuTime, KernelStats, ProcResult};
 use std::time::Duration;
@@ -25,12 +24,13 @@ use tokio::net::TcpListener;
 use tokio::runtime;
 use tokio::signal;
 use tokio::task;
+use tokio::time::{Instant, MissedTickBehavior};
 
 #[derive(Debug, Default)]
 struct Metrics {
     last_kernel: Option<KernelStats>,
     last_process: Option<Stat>,
-    cpu_user: ECDF<Ratio<u64>>,
+    cpu_user: ECDF<f64>,
     self_user: ECDF<u64>,
     self_system: ECDF<u64>,
 }
@@ -58,8 +58,10 @@ impl Metrics {
             if ticks < 10 {
                 return Ok(());
             }
-            self.cpu_user
-                .add(Ratio::new(ks.total.user - last_ks.total.user, ticks), 1);
+            self.cpu_user.add(
+                ((ks.total.user - last_ks.total.user) as f64) / (ticks as f64),
+                1,
+            );
         }
         self.last_kernel = Some(ks);
 
@@ -72,7 +74,8 @@ impl Metrics {
         Ok(())
     }
     fn compact(&mut self) {
-        println!("{:?}", self.cpu_user);
+        println!("{}", serde_json::to_string(&self.cpu_user).unwrap());
+        self.cpu_user.clear();
     }
 }
 
@@ -86,8 +89,15 @@ fn main() {
         let listener = TcpListener::bind("127.0.0.1:3000").await?;
 
         let mut metrics = Metrics::default();
+
         let mut sample_interval = tokio::time::interval(Duration::from_millis(500));
-        let mut compact_interval = tokio::time::interval(Duration::from_secs(5));
+        sample_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        const compact_duration: Duration = Duration::from_secs(5);
+        let mut compact_interval =
+            tokio::time::interval_at(Instant::now() + compact_duration, compact_duration);
+        compact_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
         loop {
             tokio::select! {
                 _ = signal::ctrl_c() => {

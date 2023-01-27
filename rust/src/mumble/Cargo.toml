@@ -8,9 +8,10 @@ edition = "2021"
 [dependencies]
 http = "0.2.8"
 num-traits = "0.2"
+serde = {version = "1.0", features=["derive"]}
 
 [build-dependencies]
-npm_rs = "1.0.0"
+npm_rs = "1.0"
 
 [dev-dependencies]
 more-asserts = "0.2"
