@@ -293,7 +293,7 @@ export class ECDF {
       sum += err * err * this.h[i];
       count += this.h[i];
     }
-    return Math.sqrt(sum / (this.n - 1));    
+    return Math.sqrt(sum / (count - 1));
   }
   
   binarySearch(v: number, min: number, max: number): number {
