@@ -15,6 +15,7 @@
 // limitations under the License.
 
 pub mod ecdf;
+mod kstest;
 pub mod ui;
 
 pub struct Metric {}

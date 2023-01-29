@@ -14,6 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::kstest;
 use num_traits::cast::ToPrimitive;
 use num_traits::Num;
 use serde::{Deserialize, Serialize};
@@ -61,28 +62,6 @@ where
      fidelity of the orginial data set is lost. (Or is it? We
      should measure.)
 
-    */
-
-    /*
-        /// This performs an insert assuming linear interpolation. I'm not sure this is actually a good idea.
-        fn insert(&mut self, index: usize, sample: V, count: SampleCount) {
-            // If the sample belongs at the beginning or end, just add it to the list.
-            if index == 0 {
-                self.samples.insert(0, (sample, count));
-                return;
-            }
-            if index == self.samples.len() {
-                self.samples.push((sample, count));
-                return;
-            }
-            // Otherwise, interpolate between points.
-            let x0 = self.samples[index - 1].0;
-            let (x1, y1) = self.samples[index];
-            let y = (sample - x0).to_f64().unwrap() / (x1 - x0).to_f64().unwrap() * f64::from(y1);
-            let y_i = y.round().to_u32().unwrap();
-            self.samples[index].1 -= y_i;
-            self.samples.insert(index, (sample, y_i + count));
-        }
     */
 
     pub fn add(&mut self, sample: V, count: SampleCount) {
@@ -135,7 +114,12 @@ where
         if len <= target_size {
             return;
         }
-        println!("Before: {0:?}", self.samples);
+
+        // TODO:
+        // errs could be stored as (index, err) pairs, like the enumerate() below.
+        // Then you can do a pass that min sorts the list by err, takes the first
+        // N items, extracts the indices, sort that, and use that to remove the
+        // items in a way that minimizes copies in self.samples.
 
         // Calculate the errors for all elements except the ends.
         let mut errs = Vec::<f64>::with_capacity(len - 1);
@@ -152,20 +136,17 @@ where
 
         // Drop points one at a time until we reach the desired size.
         while len > target_size {
-            println!("Err: {0:?}", errs);
-
             // Find the sample with the lowest error.
             let mut best_index: usize = 0;
             let mut best_err = errs[0];
             if best_err > 0.0 {
-                for i in 1..errs.len() {
-                    let err = errs[i];
-                    if err < best_err {
+                for (i, err) in errs.iter().enumerate().skip(1) {
+                    if *err < best_err {
                         best_index = i;
-                        best_err = err;
-                        if err == 0.0 {
+                        if *err == 0.0 {
                             break;
                         }
+                        best_err = *err;
                     }
                 }
             }
@@ -207,6 +188,30 @@ where
 
     pub fn observe(&mut self, sample: V) {
         self.add(sample, 1)
+    }
+
+    fn rehydrate(&self) -> Rehydrate<V> {
+        let mut iter = self.samples.iter();
+        let last = iter.next();
+        Rehydrate {
+            iter,
+            last,
+            count: 0,
+        }
+    }
+
+    /// Runs a Kolmogorov-Smirnov test against a given reference distribution.
+    ///
+    /// The returned value is the calculated confidence level, an estimate of the
+    /// likelihood that the sample comes from the reference distribution.
+    ///
+    /// See:
+    /// https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test
+    pub fn ks_test<F>(&self, cdf: F) -> f64
+    where
+        F: Fn(V) -> f64,
+    {
+        kstest::ks_test(cdf, self.rehydrate(), 0)
     }
 }
 
@@ -277,6 +282,31 @@ where
         samples.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
         let s = Counter { slice: &samples }.collect();
         ECDF { samples: s }
+    }
+}
+
+/// An iterator that can reconstruct samples in sorted order.
+struct Rehydrate<'a, V> {
+    iter: Iter<'a, (V, SampleCount)>,
+    last: Option<&'a (V, SampleCount)>,
+    count: SampleCount,
+}
+
+impl<'a, V> Iterator for Rehydrate<'a, V>
+where
+    V: Copy,
+{
+    type Item = &'a V;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (v, count) = self.last?;
+        if self.count == *count {
+            self.last = self.iter.next();
+            self.count = 0;
+            return self.next();
+        }
+        self.count += 1;
+        Some(v)
     }
 }
 
@@ -472,5 +502,17 @@ mod tests {
             &[(1, 10), (4, 9), (25, 11), (100, 100)]
         );
         assert_eq!(x.total(), before);
+    }
+
+    #[test]
+    fn rehydrate() {
+        let mut x = ECDF::<i32>::default();
+        x.add(10, 1);
+        x.add(5, 2);
+        assert_eq!(&x.samples.as_slice(), &[(5, 2), (10, 1)]);
+        assert_eq!(
+            x.rehydrate().copied().collect::<Vec<i32>>().as_slice(),
+            &[5, 5, 10]
+        );
     }
 }
