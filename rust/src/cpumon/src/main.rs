@@ -93,9 +93,9 @@ fn main() {
         let mut sample_interval = tokio::time::interval(Duration::from_millis(500));
         sample_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
-        const compact_duration: Duration = Duration::from_secs(5);
+        const COMPACT_DURATION: Duration = Duration::from_secs(5);
         let mut compact_interval =
-            tokio::time::interval_at(Instant::now() + compact_duration, compact_duration);
+            tokio::time::interval_at(Instant::now() + COMPACT_DURATION, COMPACT_DURATION);
         compact_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
