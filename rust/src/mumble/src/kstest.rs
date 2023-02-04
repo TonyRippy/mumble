@@ -23,10 +23,6 @@
 //   Free Software Foundation, Inc.,
 //   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-// FUTURE WORK:
-// Is: https://en.wikipedia.org/wiki/Anderson%E2%80%93Darling_test
-// Different? Better? In what ways?
-
 /// Round to nearest integer. Rounds half integers to the nearest even integer.
 fn nint(x: f64) -> i64 {
     let mut i: i64;
@@ -65,7 +61,7 @@ fn nint(x: f64) -> i64 {
 /// However, remember that the formula is only valid for "large" n.
 /// Theta function inversion formula is used for z <= 1
 ///
-fn kprob(z: f64) -> f64 {
+pub fn kprob(z: f64) -> f64 {
     if z < 0.2 {
         1.0
     } else if z < 0.755 {
@@ -93,49 +89,9 @@ fn kprob(z: f64) -> f64 {
     }
 }
 
-/// Runs a Kolmogorov-Smirnov test against a given reference distribution.
-///
-/// The returned value is the calculated confidence level, an estimate of the
-/// likelihood that the sample comes from the reference distribution.
-///
-/// See:
-/// https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test
-pub fn ks_test<'a, V, F, I>(cdf: F, samples: I, count: usize) -> f64
-where
-    V: 'a + Copy,
-    F: Fn(V) -> f64,
-    I: Iterator<Item = &'a V>,
-{
-    // Find the maximum difference between the sample and the reference distribution.
-    let n = count as f64;
-    let mut max = 0.0;
-    let mut ip = 0.0;
-    for (i, x) in samples.enumerate() {
-        let p = cdf(*x);
-        let mut diff = p - ip;
-        if diff.is_sign_negative() {
-            diff = -diff;
-        }
-        if diff > max {
-            max = diff;
-        }
-        ip = (i + 1) as f64 / n;
-        diff = ip - p;
-        if diff.is_sign_negative() {
-            diff = -diff;
-        }
-        if diff > max {
-            max = diff;
-        }
-    }
-    let z = max * n.sqrt();
-    kprob(z)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use statrs::{assert_almost_eq, distribution::ContinuousCDF, distribution::Normal};
 
     #[test]
     fn test_nint() {
@@ -161,19 +117,5 @@ mod tests {
         for (f, i) in TEST_CASES {
             assert_eq!(nint(f), i, "nint({}) != {}", f, i);
         }
-    }
-
-    #[test]
-    #[ignore = "doesn't pass yet"] // TODO: Not sure why... Investigate!
-    fn r_example() {
-        // Evaluated in R as a way to check the correctness of this implementation.
-        //   ks.test(c(1,2,3), "pnorm", 0, 1) -->  0.007987
-        let normal = Normal::new(0.0, 1.0).unwrap();
-        let samples = &[1.0, 2.0, 3.0];
-        assert_almost_eq!(
-            ks_test(|x| normal.cdf(x), samples.iter(), samples.len()),
-            0.007987,
-            0.000001
-        );
     }
 }

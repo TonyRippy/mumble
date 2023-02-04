@@ -9,10 +9,11 @@ edition = "2021"
 http = "0.2.8"
 num-traits = "0.2"
 serde = {version = "1.0", features=["derive"]}
-statrs = "0.16.0"
 
 [build-dependencies]
 npm_rs = "1.0"
 
 [dev-dependencies]
 more-asserts = "0.2"
+rand = {version = "0.8.5", features=["small_rng"]}
+statrs = "0.16.0"

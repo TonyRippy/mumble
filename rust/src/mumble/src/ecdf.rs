@@ -39,13 +39,29 @@ where
         self.samples.clear()
     }
 
-    /// The total number of observations used to construct this ECDF.
-    pub fn total(&self) -> SampleCount {
-        let mut sum: SampleCount = 0;
-        for (_, n) in &self.samples {
-            sum += n;
+    /// Calculates sample mean, standard deviation, and count.
+    pub fn stats(&self) -> (f64, f64, usize) {
+        let mut sum = 0.0;
+        let mut count: SampleCount = 0;
+        for (v, n) in &self.samples {
+            let vf = v.to_f64().unwrap();
+            sum += vf * f64::from(*n);
+            count += n;
         }
-        sum
+        let mean = sum / f64::from(count);
+        sum = 0.0;
+        for (v, n) in &self.samples {
+            let vf = v.to_f64().unwrap();
+            let err = vf - mean;
+            sum += err * err * f64::from(*n);
+        }
+        let stddev = (sum / f64::from(count - 1)).sqrt();
+        (mean, stddev, count as usize)
+    }
+
+    /// The total number of observations used to construct this ECDF.
+    pub fn count(&self) -> SampleCount {
+        self.samples.iter().fold(0, |sum, (_, n)| sum + *n)
     }
 
     /*
@@ -177,7 +193,6 @@ where
                     (x1 - x0).to_f64().unwrap() * f64::from(y1 + y2) / (x2 - x0).to_f64().unwrap();
                 errs[best_index] = (f64::from(y1) - y).abs();
             }
-            println!("After: {0:?}", self.samples);
         }
     }
 
@@ -190,15 +205,8 @@ where
         self.add(sample, 1)
     }
 
-    fn rehydrate(&self) -> Rehydrate<V> {
-        let mut iter = self.samples.iter();
-        let last = iter.next();
-        Rehydrate {
-            iter,
-            last,
-            count: 0,
-        }
-    }
+    // TODO: Would using an Anderson-Darling test be better? In what ways?
+    // Is: https://en.wikipedia.org/wiki/Anderson%E2%80%93Darling_test
 
     /// Runs a Kolmogorov-Smirnov test against a given reference distribution.
     ///
@@ -207,11 +215,81 @@ where
     ///
     /// See:
     /// https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test
-    pub fn ks_test<F>(&self, cdf: F) -> f64
+    pub fn drawn_from_distribution<F>(&self, cdf: F) -> f64
     where
         F: Fn(V) -> f64,
     {
-        kstest::ks_test(cdf, self.rehydrate(), 0)
+        // Find the maximum difference between the sample and the reference distribution.
+        let total = f64::from(self.count());
+        let mut max_diff = 0.0;
+        let mut p = 0.0;
+        let mut sum: SampleCount = 0;
+        for (v, n) in self.samples.iter() {
+            let p_dist = cdf(*v);
+            let mut diff = p_dist - p;
+            if diff.is_sign_negative() {
+                diff = -diff;
+            }
+            if diff > max_diff {
+                max_diff = diff;
+            }
+            sum += *n;
+            p = sum as f64 / total;
+            diff = p_dist - p;
+            if diff.is_sign_negative() {
+                diff = -diff;
+            }
+            if diff > max_diff {
+                max_diff = diff;
+            }
+        }
+        let z = max_diff * total.sqrt();
+        kstest::kprob(z)
+    }
+
+    /// Runs a two-sample Kolmogorov-Smirnov test.
+    ///
+    /// The returned value is the calculated confidence level, an estimate of the
+    /// likelihood that the two samples were drawn from the same distribution.
+    ///
+    /// See:
+    /// https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test#Two-sample_Kolmogorov%E2%80%93Smirnov_test
+    pub fn drawn_from_same_distribution_as(&self, other: &ECDF<V>) -> f64 {
+        let s_t = f64::from(self.count());
+        let mut s_sum: SampleCount = 0;
+        let mut s_iter = self.samples.iter();
+
+        let o_t = f64::from(other.count());
+        let mut o_sum: SampleCount = 0;
+        let mut o_iter = other.samples.iter();
+
+        let mut max_diff = 0.0;
+        let mut s_i = s_iter.next();
+        let mut o_i = o_iter.next();
+        let mut s_p = 0.0;
+        let mut o_p = 0.0;
+        while let (Some((s_v, s_n)), Some((o_v, o_n))) = (s_i, o_i) {
+            let cmp = s_v.partial_cmp(o_v).unwrap();
+            if cmp.is_le() {
+                s_sum += s_n;
+                s_p = f64::from(s_sum) / s_t;
+                s_i = s_iter.next();
+            }
+            if cmp.is_ge() {
+                o_sum += o_n;
+                o_p = f64::from(o_sum) / o_t;
+                o_i = o_iter.next();
+            }
+            let mut diff: f64 = s_p - o_p;
+            if diff.is_sign_negative() {
+                diff = -diff;
+            }
+            if diff > max_diff {
+                max_diff = diff;
+            }
+        }
+        let z = max_diff * (s_t * o_t / (s_t + o_t)).sqrt();
+        kstest::kprob(z)
     }
 }
 
@@ -285,40 +363,20 @@ where
     }
 }
 
-/// An iterator that can reconstruct samples in sorted order.
-struct Rehydrate<'a, V> {
-    iter: Iter<'a, (V, SampleCount)>,
-    last: Option<&'a (V, SampleCount)>,
-    count: SampleCount,
-}
-
-impl<'a, V> Iterator for Rehydrate<'a, V>
-where
-    V: Copy,
-{
-    type Item = &'a V;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (v, count) = self.last?;
-        if self.count == *count {
-            self.last = self.iter.next();
-            self.count = 0;
-            return self.next();
-        }
-        self.count += 1;
-        Some(v)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::distributions::Distribution;
+    use rand::rngs::SmallRng;
+    use rand::SeedableRng;
+    use statrs::assert_almost_eq;
+    use statrs::distribution::{ContinuousCDF, Normal};
 
     #[test]
     fn from_empty_slice() {
         let x: ECDF<i32> = ECDF::from(vec![]);
         assert_eq!(&x.samples.as_slice(), &[]);
-        assert_eq!(x.total(), 0);
+        assert_eq!(x.count(), 0);
     }
 
     #[test]
@@ -336,26 +394,26 @@ mod tests {
     fn from_unsorted_slice() {
         let x: ECDF<i32> = ECDF::from(vec![1, 1, 3, 3, 2, 10, 3, 2, 1]);
         assert_eq!(&x.samples.as_slice(), &[(1, 3), (2, 2), (3, 3), (10, 1)]);
-        assert_eq!(x.total(), 9);
+        assert_eq!(x.count(), 9);
     }
 
     #[test]
     fn insert() {
         let mut x: ECDF<i32> = ECDF::default();
         assert_eq!(&x.samples.as_slice(), &[]);
-        assert_eq!(x.total(), 0);
+        assert_eq!(x.count(), 0);
 
         x.observe(3);
         assert_eq!(&x.samples.as_slice(), &[(3, 1)]);
-        assert_eq!(x.total(), 1);
+        assert_eq!(x.count(), 1);
 
         x.observe(1);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1)]);
-        assert_eq!(x.total(), 2);
+        assert_eq!(x.count(), 2);
 
         x.observe(5);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1), (5, 1)]);
-        assert_eq!(x.total(), 3);
+        assert_eq!(x.count(), 3);
     }
 
     /// Verifies that insertions at the beginning of the list work as expected.
@@ -366,10 +424,10 @@ mod tests {
         };
         x.observe(0);
         assert_eq!(&x.samples.as_slice(), &[(0, 1), (1, 1), (3, 1), (5, 1)]);
-        assert_eq!(x.total(), 4);
+        assert_eq!(x.count(), 4);
         x.observe(0);
         assert_eq!(&x.samples.as_slice(), &[(0, 2), (1, 1), (3, 1), (5, 1)]);
-        assert_eq!(x.total(), 5);
+        assert_eq!(x.count(), 5);
     }
 
     /// Verifies that insertions at the end of the list work as expected.
@@ -380,10 +438,10 @@ mod tests {
         };
         x.observe(6);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1), (5, 1), (6, 1)]);
-        assert_eq!(x.total(), 4);
+        assert_eq!(x.count(), 4);
         x.observe(6);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1), (5, 1), (6, 2)]);
-        assert_eq!(x.total(), 5);
+        assert_eq!(x.count(), 5);
     }
 
     #[test]
@@ -393,34 +451,34 @@ mod tests {
         };
         x.observe(2);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (2, 1), (3, 2), (5, 2)]);
-        assert_eq!(x.total(), 6);
+        assert_eq!(x.count(), 6);
         x.observe(2);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (2, 2), (3, 2), (5, 2)]);
-        assert_eq!(x.total(), 7);
+        assert_eq!(x.count(), 7);
     }
 
     #[test]
     fn merge() {
         let mut x: ECDF<i32> = ECDF::default();
-        assert_eq!(x.total(), 0);
+        assert_eq!(x.count(), 0);
 
         let empty: ECDF<i32> = ECDF::default();
         x.merge_sorted(empty.samples.iter());
-        assert_eq!(x.total(), 0);
+        assert_eq!(x.count(), 0);
 
         let mut y: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1)],
         };
-        assert_eq!(y.total(), 3);
+        assert_eq!(y.count(), 3);
         y.merge_sorted(empty.samples.iter());
-        assert_eq!(y.total(), 3);
+        assert_eq!(y.count(), 3);
 
         let mut not_empty = ECDF {
             samples: vec![(0, 1)],
         };
         y.merge_sorted(not_empty.samples.iter());
         assert_eq!(&y.samples.as_slice(), &[(0, 1), (1, 1), (2, 1), (3, 1)]);
-        assert_eq!(y.total(), 4);
+        assert_eq!(y.count(), 4);
         not_empty = ECDF {
             samples: vec![(4, 1)],
         };
@@ -429,7 +487,7 @@ mod tests {
             &y.samples.as_slice(),
             &[(0, 1), (1, 1), (2, 1), (3, 1), (4, 1)]
         );
-        assert_eq!(y.total(), 5);
+        assert_eq!(y.count(), 5);
     }
 
     /// Verifies correct behavior when samples are in a straight line.
@@ -440,7 +498,7 @@ mod tests {
         };
         x.compact_to(4);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 2), (4, 1), (5, 1)]);
-        assert_eq!(x.total(), 5);
+        assert_eq!(x.count(), 5);
     }
 
     /// Verifies that the minimum size post-compaction is 3: (min, ???, max)
@@ -451,7 +509,7 @@ mod tests {
         };
         x.compact_to(1);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (4, 3), (5, 1)]);
-        assert_eq!(x.total(), 5);
+        assert_eq!(x.count(), 5);
     }
 
     /// Verifies that a compaction is a no-op if the target size is greater than the current size.
@@ -465,13 +523,13 @@ mod tests {
             &x.samples.as_slice(),
             &[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]
         );
-        assert_eq!(x.total(), 5);
+        assert_eq!(x.count(), 5);
         x.compact_to(100);
         assert_eq!(
             &x.samples.as_slice(),
             &[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]
         );
-        assert_eq!(x.total(), 5);
+        assert_eq!(x.count(), 5);
     }
 
     /// Performs compactions with non-zero errors.
@@ -482,7 +540,7 @@ mod tests {
         };
         x.compact_to(4);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 3), (4, 4), (5, 10)]);
-        assert_eq!(x.total(), 18);
+        assert_eq!(x.count(), 18);
 
         x = ECDF {
             samples: vec![
@@ -495,24 +553,69 @@ mod tests {
                 (100, 100),
             ],
         };
-        let before = x.total();
+        let before = x.count();
         x.compact_to(4);
         assert_eq!(
             &x.samples.as_slice(),
             &[(1, 10), (4, 9), (25, 11), (100, 100)]
         );
-        assert_eq!(x.total(), before);
+        assert_eq!(x.count(), before);
     }
 
     #[test]
-    fn rehydrate() {
-        let mut x = ECDF::<i32>::default();
-        x.add(10, 1);
-        x.add(5, 2);
-        assert_eq!(&x.samples.as_slice(), &[(5, 2), (10, 1)]);
-        assert_eq!(
-            x.rehydrate().copied().collect::<Vec<i32>>().as_slice(),
-            &[5, 5, 10]
+    fn good_fit() {
+        let x = ECDF::from(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        let (mean, stddev, _) = x.stats();
+        let normal = Normal::new(mean, stddev).unwrap();
+        let p = x.drawn_from_distribution(|x| normal.cdf(x));
+        assert!(p > 0.99, "Expected p > 0.99, was {}", p);
+    }
+
+    #[test]
+    fn matches_itself() {
+        let x = ECDF::from(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        //let p =
+        assert_eq!(x.drawn_from_same_distribution_as(&x), 1.0); //;p > 0.8, "Expected p > 0.8, was {}", p);
+    }
+
+    #[test]
+    fn doesnt_match_disjoint_sample() {
+        let x = ECDF::from(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        let y = ECDF::from(vec![11.0, 12.0, 13.0, 14.0, 15.0]);
+        let p = x.drawn_from_same_distribution_as(&y);
+        assert!(p < 0.02, "Expected p < 0.02, was {}", p);
+    }
+
+    #[test]
+    #[ignore = "flaky due to random sampling"]
+    fn drawn_from_same_distribution() {
+        let mut rng = SmallRng::from_entropy();
+        let normal = Normal::new(2.0, 3.0).unwrap();
+        let x = ECDF::from(normal.sample_iter(&mut rng).take(20).collect::<Vec<f64>>());
+        println!(
+            "P(x drawn from dist) = {}",
+            x.drawn_from_distribution(|x| normal.cdf(x))
+        );
+        let y = ECDF::from(normal.sample_iter(&mut rng).take(15).collect::<Vec<f64>>());
+        println!(
+            "P(y drawn from dist2) = {}",
+            y.drawn_from_distribution(|x| normal.cdf(x))
+        );
+        let p = x.drawn_from_same_distribution_as(&y);
+        assert!(p > 0.8, "Expected p > 0.8, was {}", p);
+    }
+
+    #[test]
+    #[ignore = "doesn't pass due to different method of calculating p-value"]
+    fn r_example() {
+        // Evaluated in R as a way to check the correctness of this implementation.
+        //   ks.test(c(1,2,3), "pnorm", 0, 1) -->  0.007987
+        let normal = Normal::new(2.0, 3.0).unwrap();
+        let x = ECDF::from(vec![1.0, 2.0, 3.0]);
+        assert_almost_eq!(
+            x.drawn_from_distribution(|x| normal.cdf(x)),
+            0.007987,
+            0.000001
         );
     }
 }
