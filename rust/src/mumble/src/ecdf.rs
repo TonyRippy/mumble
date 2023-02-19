@@ -21,9 +21,19 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::From;
 use std::fmt::Debug;
+use std::iter::{FusedIterator, Scan};
 use std::slice::Iter;
 
 type SampleCount = u32;
+
+/// The iterator type returned by ECDF::point_iter().
+/// This needed to be typed explicitly because it was not possible to construct
+/// Zip using opaque (impl Iterator) types.
+type PointIter<'a, V> = Scan<
+    std::slice::Iter<'a, (V, u32)>,
+    (SampleCount, f64),
+    fn(&mut (SampleCount, f64), &(V, SampleCount)) -> Option<(V, f64)>,
+>;
 
 #[derive(Clone, Debug, Default)]
 pub struct ECDF<V> {
@@ -291,6 +301,87 @@ where
         let z = max_diff * (s_t * o_t / (s_t + o_t)).sqrt();
         kstest::kprob(z)
     }
+
+    /// Iterates through all points on the ECDF curve.
+    /// The returned iterator generates (V, P(v <= V)) tuples.
+    fn point_iter(&self) -> PointIter<'_, V> {
+        self.samples
+            .iter()
+            .scan((0, self.count() as f64), |(sum, total), &(v, n)| {
+                *sum += n;
+                Some((v, *sum as f64 / *total))
+            })
+    }
+
+    /// Iterates through all points of comparison between two ECDF curves.
+    /// The returned iterator generates (V, P(self <= V), P(other <= V)) tuples.
+    fn zip<'a>(&'a self, other: &'a ECDF<V>) -> impl Iterator<Item = (V, f64, f64)> + 'a {
+        let mut a_iter = self.point_iter();
+        let a_item = a_iter.next();
+        let mut b_iter = other.point_iter();
+        let b_item = b_iter.next();
+        Zip {
+            a_iter,
+            b_iter,
+            a_item,
+            b_item,
+            a: 0.0,
+            b: 0.0,
+        }
+    }
+
+    /// Calculates the area difference between the two ECDFs.
+    pub fn area_difference(&self, other: &ECDF<V>) -> f64 {
+        let mut it = self
+            .zip(other)
+            // find the difference between self and other at each point of the curve
+            .map(|(v, a, b)| (v, (a - b).abs()));
+        let mut last: (V, f64);
+        match it.next() {
+            Some(x) => {
+                last = x;
+            }
+            _ => {
+                return 0.0;
+            }
+        }
+        let mut sum = 0.0;
+        for now in it {
+            dbg!(last, now);
+            // The space between last and now makes a rectangle:
+            //
+            //                       +---------
+            //                       |
+            //            now.1 -->  |
+            //                       |
+            //             +---------+
+            //             |         :
+            //  last.1 --> |         :
+            //             |         :
+            //       ------+.........:
+            //
+            //       0   last.0     now.0
+            //
+            // The width of this rectangle is (now.0 - last.0), the height is last.1.
+            let w = (now.0 - last.0).to_f64().unwrap();
+            let area = w * last.1;
+            sum += area;
+            dbg!(area, sum);
+            last = now;
+        }
+        sum
+    }
+}
+
+impl<V> From<Vec<V>> for ECDF<V>
+where
+    V: PartialOrd + Copy,
+{
+    fn from(mut samples: Vec<V>) -> Self {
+        samples.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        let s = Counter { slice: &samples }.collect();
+        ECDF { samples: s }
+    }
 }
 
 impl<V> Serialize for ECDF<V>
@@ -352,15 +443,75 @@ where
     }
 }
 
-impl<V> From<Vec<V>> for ECDF<V>
+struct Zip<A, B>
 where
-    V: PartialOrd + Copy,
+    A: Iterator,
+    B: Iterator,
 {
-    fn from(mut samples: Vec<V>) -> Self {
-        samples.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
-        let s = Counter { slice: &samples }.collect();
-        ECDF { samples: s }
+    a_iter: A,
+    b_iter: B,
+    a_item: Option<A::Item>,
+    b_item: Option<B::Item>,
+    a: f64,
+    b: f64,
+}
+
+impl<A, B, V> Iterator for Zip<A, B>
+where
+    A: Iterator<Item = (V, f64)>,
+    B: Iterator<Item = (V, f64)>,
+    V: Copy + PartialOrd,
+{
+    type Item = (V, f64, f64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.a_item, self.b_item) {
+            (Some((a_v, a_p)), Some((b_v, b_p))) => {
+                let cmp = a_v.partial_cmp(&b_v).unwrap();
+                let v: V;
+                if cmp.is_le() {
+                    v = a_v;
+                    self.a = a_p;
+                    self.a_item = self.a_iter.next();
+                } else {
+                    v = b_v;
+                }
+                if cmp.is_ge() {
+                    self.b = b_p;
+                    self.b_item = self.b_iter.next();
+                }
+                Some((v, self.a, self.b))
+            }
+            (Some((a_v, a_p)), None) => {
+                self.a_item = self.a_iter.next();
+                Some((a_v, a_p, 1.0))
+            }
+            (None, Some((b_v, b_p))) => {
+                self.b_item = self.b_iter.next();
+                Some((b_v, 1.0, b_p))
+            }
+            _ => None,
+        }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (a_lower, a_upper) = self.a_iter.size_hint();
+        let (b_lower, b_upper) = self.b_iter.size_hint();
+        let lower = std::cmp::max(a_lower, b_lower);
+        let upper = match (a_upper, b_upper) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+        (lower, upper)
+    }
+}
+
+impl<A, B, V> FusedIterator for Zip<A, B>
+where
+    A: Iterator<Item = (V, f64)>,
+    B: Iterator<Item = (V, f64)>,
+    V: Copy + PartialOrd,
+{
 }
 
 #[cfg(test)]
@@ -617,5 +768,79 @@ mod tests {
             0.007987,
             0.000001
         );
+    }
+
+    #[test]
+    fn point_iter() {
+        let x = ECDF::from(vec![1, 2, 2, 3]);
+        let mut it = x.point_iter();
+        assert_eq!(it.next(), Some((1, 0.25)));
+        assert_eq!(it.next(), Some((2, 0.75)));
+        assert_eq!(it.next(), Some((3, 1.0)));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn zip_ecdfs_interleave() {
+        let a = ECDF::from(vec![1, 3, 3, 5]);
+        let b = ECDF::from(vec![2, 2, 3, 4]);
+        let mut it = a.zip(&b);
+        assert_eq!(it.next(), Some((1, 0.25, 0.00)));
+        assert_eq!(it.next(), Some((2, 0.25, 0.50)));
+        assert_eq!(it.next(), Some((3, 0.75, 0.75)));
+        assert_eq!(it.next(), Some((4, 0.75, 1.00)));
+        assert_eq!(it.next(), Some((5, 1.00, 1.00)));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn zip_ecdfs_empty() {
+        let empty = ECDF::<i32>::default();
+        let not = ECDF::from(vec![1, 2]);
+        let mut it = empty.zip(&not);
+        assert_eq!(it.next(), Some((1, 1.0, 0.5)));
+        assert_eq!(it.next(), Some((2, 1.0, 1.0)));
+        assert_eq!(it.next(), None);
+        // It should work in the other direction too...
+        it = not.zip(&empty);
+        assert_eq!(it.next(), Some((1, 0.5, 1.0)));
+        assert_eq!(it.next(), Some((2, 1.0, 1.0)));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn zip_ecdfs_self() {
+        let a = ECDF::from(vec![1, 2]);
+        let mut it = a.zip(&a);
+        assert_eq!(it.next(), Some((1, 0.5, 0.5)));
+        assert_eq!(it.next(), Some((2, 1.0, 1.0)));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn zip_ecdfs_no_overlap() {
+        let a = ECDF::from(vec![1, 2]);
+        let b = ECDF::from(vec![3, 4]);
+        let mut it = a.zip(&b);
+        assert_eq!(it.next(), Some((1, 0.5, 0.0)));
+        assert_eq!(it.next(), Some((2, 1.0, 0.0)));
+        assert_eq!(it.next(), Some((3, 1.0, 0.5)));
+        assert_eq!(it.next(), Some((4, 1.0, 1.0)));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn simple_diff() {
+        let a = ECDF::from(vec![1, 2, 3, 4]);
+        let b = ECDF::from(vec![1, 3, 3, 4]);
+        let c = ECDF::from(vec![4, 4, 4, 4]);
+        assert_eq!(a.area_difference(&a), 0.0);
+        assert_eq!(a.area_difference(&b), 0.25);
+        assert_eq!(a.area_difference(&c), 1.5);
+
+        let d = ECDF::from(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let e = ECDF::from(vec![2, 4, 6, 8]);
+        assert_eq!(d.area_difference(&e), 0.5);
+        assert_eq!(e.area_difference(&d), 0.5);
     }
 }
