@@ -21,19 +21,10 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::From;
 use std::fmt::Debug;
-use std::iter::{FusedIterator, Scan};
+use std::iter::FusedIterator;
 use std::slice::Iter;
 
 type SampleCount = u32;
-
-/// The iterator type returned by ECDF::point_iter().
-/// This needed to be typed explicitly because it was not possible to construct
-/// Zip using opaque (impl Iterator) types.
-type PointIter<'a, V> = Scan<
-    std::slice::Iter<'a, (V, u32)>,
-    (SampleCount, f64),
-    fn(&mut (SampleCount, f64), &(V, SampleCount)) -> Option<(V, f64)>,
->;
 
 #[derive(Clone, Debug, Default)]
 pub struct ECDF<V> {
@@ -304,7 +295,7 @@ where
 
     /// Iterates through all points on the ECDF curve.
     /// The returned iterator generates (V, P(v <= V)) tuples.
-    fn point_iter(&self) -> PointIter<'_, V> {
+    fn point_iter(&self) -> impl Iterator<Item = (V, f64)> + '_ {
         self.samples
             .iter()
             .scan((0, self.count() as f64), |(sum, total), &(v, n)| {
@@ -773,11 +764,7 @@ mod tests {
     #[test]
     fn point_iter() {
         let x = ECDF::from(vec![1, 2, 2, 3]);
-        let mut it = x.point_iter();
-        assert_eq!(it.next(), Some((1, 0.25)));
-        assert_eq!(it.next(), Some((2, 0.75)));
-        assert_eq!(it.next(), Some((3, 1.0)));
-        assert_eq!(it.next(), None);
+        itertools::assert_equal(x.point_iter(), [(1, 0.25), (2, 0.75), (3, 1.0)].into_iter());
     }
 
     #[test]
