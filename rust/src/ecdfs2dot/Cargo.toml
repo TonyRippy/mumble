@@ -1,0 +1,9 @@
+[package]
+name = "ecdfs2dot"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+flame-clustering = "0"
+mumble = { path = "../mumble" }
+serde_json = "1.0"

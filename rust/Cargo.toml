@@ -1,6 +1,6 @@
 [workspace]
-edition = "2021"
 members = [
     "src/cpumon",
+    "src/ecdfs2dot",
     "src/mumble",
 ]
