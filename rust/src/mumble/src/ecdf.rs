@@ -491,6 +491,15 @@ mod tests {
     }
 
     #[test]
+    fn stats() {
+        let x: ECDF<i32> = ECDF::from(vec![1, 1, 2, 3, 5, 8]);
+        let (mean, stddev, count) = x.stats();
+        assert_almost_eq!(mean, 3.33333, 0.00001);
+        assert_almost_eq!(stddev, 2.73252, 0.00001);
+        assert_eq!(count, 6);
+    }
+
+    #[test]
     fn insert() {
         let mut x: ECDF<i32> = ECDF::default();
         assert_eq!(&x.samples.as_slice(), &[]);
