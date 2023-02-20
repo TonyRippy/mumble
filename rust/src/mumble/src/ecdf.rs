@@ -24,11 +24,9 @@ use std::fmt::Debug;
 use std::iter::FusedIterator;
 use std::slice::Iter;
 
-type SampleCount = u32;
-
 #[derive(Clone, Debug, Default)]
 pub struct ECDF<V> {
-    samples: Vec<(V, SampleCount)>,
+    samples: Vec<(V, usize)>,
 }
 
 impl<V> ECDF<V>
@@ -40,48 +38,37 @@ where
         self.samples.clear()
     }
 
+    /// The total number of samples used to construct this ECDF.
+    pub fn len(&self) -> usize {
+        self.samples.iter().map(|x| x.1).sum()
+    }
+
+    /// Returns `true` is this ECDF has no samples.
+    pub fn is_empty(&self) -> bool {
+        self.samples.is_empty()
+    }
+
     /// Calculates sample mean, standard deviation, and count.
     pub fn stats(&self) -> (f64, f64, usize) {
         let mut sum = 0.0;
-        let mut count: SampleCount = 0;
-        for (v, n) in &self.samples {
+        let mut count = 0;
+        for &(v, n) in &self.samples {
             let vf = v.to_f64().unwrap();
-            sum += vf * f64::from(*n);
+            sum += vf * (n as f64);
             count += n;
         }
-        let mean = sum / f64::from(count);
+        let mean = sum / (count as f64);
         sum = 0.0;
-        for (v, n) in &self.samples {
+        for &(v, n) in &self.samples {
             let vf = v.to_f64().unwrap();
             let err = vf - mean;
-            sum += err * err * f64::from(*n);
+            sum += err * err * (n as f64);
         }
-        let stddev = (sum / f64::from(count - 1)).sqrt();
-        (mean, stddev, count as usize)
+        let stddev = (sum / ((count - 1) as f64)).sqrt();
+        (mean, stddev, count)
     }
 
-    /// The total number of observations used to construct this ECDF.
-    pub fn count(&self) -> SampleCount {
-        self.samples.iter().fold(0, |sum, (_, n)| sum + *n)
-    }
-
-    /*
-     Cases with Observe:
-
-     For highest fidelity, we should try and keep the buffer as
-     full as possible, and only compact down to the sample size
-     when needed.  That implies that when the buffer is full and
-     you observe a new value, then only one sample should be
-     replaced.  OTOH, finding the value to replace may be an
-     expensive operation, in which case for performance reasons we
-     may want to compact when full in order to reduce the number
-     of "compaction pauses." The downsize of that is that a lot of
-     fidelity of the orginial data set is lost. (Or is it? We
-     should measure.)
-
-    */
-
-    pub fn add(&mut self, sample: V, count: SampleCount) {
+    fn add_n(&mut self, sample: V, count: usize) {
         match self
             .samples
             .binary_search_by(|(v, _)| v.partial_cmp(&sample).unwrap())
@@ -95,18 +82,23 @@ where
         }
     }
 
-    pub fn merge_sorted(&mut self, it: Iter<(V, SampleCount)>) {
-        let mut i: usize = 0;
+    /// Adds a single observation to this ECDF.
+    pub fn add(&mut self, sample: V) {
+        self.add_n(sample, 1)
+    }
+
+    pub fn merge_sorted(&mut self, it: Iter<(V, usize)>) {
+        let mut i = 0;
         let mut n = self.samples.len();
-        for (v, c) in it {
+        for &(v, c) in it {
             loop {
                 if i == n {
-                    self.samples.push((*v, *c));
+                    self.samples.push((v, c));
                     break;
                 }
                 match v.partial_cmp(&self.samples[i].0).unwrap() {
                     Ordering::Less => {
-                        self.samples.insert(i, (*v, *c));
+                        self.samples.insert(i, (v, c));
                         n += 1;
                         break;
                     }
@@ -145,8 +137,8 @@ where
         for i in 2..len {
             let (x2, y2) = self.samples[i];
             // Find expected y for x1, given linear interpolation between x0 and x2.
-            let y = (x1 - x0).to_f64().unwrap() * f64::from(y1 + y2) / (x2 - x0).to_f64().unwrap();
-            errs.push((f64::from(y1) - y).abs());
+            let y = (x1 - x0).to_f64().unwrap() * ((y1 + y2) as f64) / (x2 - x0).to_f64().unwrap();
+            errs.push((y1 as f64 - y).abs());
             x0 = x1;
             (x1, y1) = (x2, y2);
         }
@@ -180,8 +172,8 @@ where
                 (x1, y1) = self.samples[best_index];
                 let (x2, y2) = self.samples[best_index + 1];
                 let y =
-                    (x1 - x0).to_f64().unwrap() * f64::from(y1 + y2) / (x2 - x0).to_f64().unwrap();
-                errs[i] = (f64::from(y1) - y).abs();
+                    (x1 - x0).to_f64().unwrap() * ((y1 + y2) as f64) / (x2 - x0).to_f64().unwrap();
+                errs[i] = (y1 as f64 - y).abs();
                 x0 = x1;
                 (x1, y1) = (x2, y2);
             } else {
@@ -191,8 +183,8 @@ where
             if best_index < errs.len() {
                 let (x2, y2) = self.samples[best_index + 2];
                 let y =
-                    (x1 - x0).to_f64().unwrap() * f64::from(y1 + y2) / (x2 - x0).to_f64().unwrap();
-                errs[best_index] = (f64::from(y1) - y).abs();
+                    (x1 - x0).to_f64().unwrap() * ((y1 + y2) as f64) / (x2 - x0).to_f64().unwrap();
+                errs[best_index] = (y1 as f64 - y).abs();
             }
         }
     }
@@ -200,10 +192,6 @@ where
     /// Shrinks the capacity of the backing vector as much as possible, freeing memory.
     pub fn shrink_to_fit(&mut self) {
         self.samples.shrink_to_fit()
-    }
-
-    pub fn observe(&mut self, sample: V) {
-        self.add(sample, 1)
     }
 
     // TODO: Would using an Anderson-Darling test be better? In what ways?
@@ -221,25 +209,19 @@ where
         F: Fn(V) -> f64,
     {
         // Find the maximum difference between the sample and the reference distribution.
-        let total = f64::from(self.count());
+        let total = self.len() as f64;
         let mut max_diff = 0.0;
         let mut p = 0.0;
-        let mut sum: SampleCount = 0;
-        for (v, n) in self.samples.iter() {
-            let p_dist = cdf(*v);
-            let mut diff = p_dist - p;
-            if diff.is_sign_negative() {
-                diff = -diff;
-            }
+        let mut sum: usize = 0;
+        for &(v, n) in self.samples.iter() {
+            let p_dist = cdf(v);
+            let mut diff = (p_dist - p).abs();
             if diff > max_diff {
                 max_diff = diff;
             }
-            sum += *n;
+            sum += n;
             p = sum as f64 / total;
-            diff = p_dist - p;
-            if diff.is_sign_negative() {
-                diff = -diff;
-            }
+            diff = (p_dist - p).abs();
             if diff > max_diff {
                 max_diff = diff;
             }
@@ -256,40 +238,15 @@ where
     /// See:
     /// https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test#Two-sample_Kolmogorov%E2%80%93Smirnov_test
     pub fn drawn_from_same_distribution_as(&self, other: &ECDF<V>) -> f64 {
-        let s_t = f64::from(self.count());
-        let mut s_sum: SampleCount = 0;
-        let mut s_iter = self.samples.iter();
-
-        let o_t = f64::from(other.count());
-        let mut o_sum: SampleCount = 0;
-        let mut o_iter = other.samples.iter();
-
-        let mut max_diff = 0.0;
-        let mut s_i = s_iter.next();
-        let mut o_i = o_iter.next();
-        let mut s_p = 0.0;
-        let mut o_p = 0.0;
-        while let (Some((s_v, s_n)), Some((o_v, o_n))) = (s_i, o_i) {
-            let cmp = s_v.partial_cmp(o_v).unwrap();
-            if cmp.is_le() {
-                s_sum += s_n;
-                s_p = f64::from(s_sum) / s_t;
-                s_i = s_iter.next();
-            }
-            if cmp.is_ge() {
-                o_sum += o_n;
-                o_p = f64::from(o_sum) / o_t;
-                o_i = o_iter.next();
-            }
-            let mut diff: f64 = s_p - o_p;
-            if diff.is_sign_negative() {
-                diff = -diff;
-            }
-            if diff > max_diff {
-                max_diff = diff;
-            }
-        }
-        let z = max_diff * (s_t * o_t / (s_t + o_t)).sqrt();
+        let max_diff = self
+            .zip(other)
+            // find the difference between self and other at each point of the curve
+            .map(|(_, a, b)| (a - b).abs())
+            .reduce(|a, b| if a < b { b } else { a })
+            .unwrap_or(0.0);
+        let n = self.len();
+        let m = other.len();
+        let z = max_diff * ((n * m) as f64 / (n + m) as f64).sqrt();
         kstest::kprob(z)
     }
 
@@ -298,7 +255,7 @@ where
     fn point_iter(&self) -> impl Iterator<Item = (V, f64)> + '_ {
         self.samples
             .iter()
-            .scan((0, self.count() as f64), |(sum, total), &(v, n)| {
+            .scan((0, self.len() as f64), |(sum, total), &(v, n)| {
                 *sum += n;
                 Some((v, *sum as f64 / *total))
             })
@@ -338,7 +295,6 @@ where
         }
         let mut sum = 0.0;
         for now in it {
-            dbg!(last, now);
             // The space between last and now makes a rectangle:
             //
             //                       +---------
@@ -357,7 +313,6 @@ where
             let w = (now.0 - last.0).to_f64().unwrap();
             let area = w * last.1;
             sum += area;
-            dbg!(area, sum);
             last = now;
         }
         sum
@@ -409,7 +364,7 @@ impl<'a, V: 'a> Iterator for Counter<'a, V>
 where
     V: 'a + PartialEq + Copy,
 {
-    type Item = (V, SampleCount);
+    type Item = (V, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.slice.is_empty() {
@@ -429,7 +384,7 @@ where
                 }
                 i += 1;
             }
-            Some((v, i.try_into().unwrap()))
+            Some((v, i))
         }
     }
 }
@@ -518,44 +473,40 @@ mod tests {
     fn from_empty_slice() {
         let x: ECDF<i32> = ECDF::from(vec![]);
         assert_eq!(&x.samples.as_slice(), &[]);
-        assert_eq!(x.count(), 0);
+        assert_eq!(x.len(), 0);
     }
 
     #[test]
     fn count_sorted() {
         let v: Vec<i32> = vec![1, 1, 2, 3, 3, 3];
-        let mut c = Counter { slice: &v };
-        assert_eq!(c.next(), Some((1, 2)));
-        assert_eq!(c.next(), Some((2, 1)));
-        assert_eq!(c.next(), Some((3, 3)));
-        assert_eq!(c.next(), None);
-        assert_eq!(c.next(), None);
+        let c = Counter { slice: &v };
+        itertools::assert_equal(c, [(1, 2), (2, 1), (3, 3)].into_iter());
     }
 
     #[test]
     fn from_unsorted_slice() {
         let x: ECDF<i32> = ECDF::from(vec![1, 1, 3, 3, 2, 10, 3, 2, 1]);
         assert_eq!(&x.samples.as_slice(), &[(1, 3), (2, 2), (3, 3), (10, 1)]);
-        assert_eq!(x.count(), 9);
+        assert_eq!(x.len(), 9);
     }
 
     #[test]
     fn insert() {
         let mut x: ECDF<i32> = ECDF::default();
         assert_eq!(&x.samples.as_slice(), &[]);
-        assert_eq!(x.count(), 0);
+        assert_eq!(x.len(), 0);
 
-        x.observe(3);
+        x.add(3);
         assert_eq!(&x.samples.as_slice(), &[(3, 1)]);
-        assert_eq!(x.count(), 1);
+        assert_eq!(x.len(), 1);
 
-        x.observe(1);
-        assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1)]);
-        assert_eq!(x.count(), 2);
+        x.add_n(1, 2);
+        assert_eq!(&x.samples.as_slice(), &[(1, 2), (3, 1)]);
+        assert_eq!(x.len(), 3);
 
-        x.observe(5);
-        assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1), (5, 1)]);
-        assert_eq!(x.count(), 3);
+        x.add(5);
+        assert_eq!(&x.samples.as_slice(), &[(1, 2), (3, 1), (5, 1)]);
+        assert_eq!(x.len(), 4);
     }
 
     /// Verifies that insertions at the beginning of the list work as expected.
@@ -564,12 +515,12 @@ mod tests {
         let mut x: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (3, 1), (5, 1)],
         };
-        x.observe(0);
+        x.add(0);
         assert_eq!(&x.samples.as_slice(), &[(0, 1), (1, 1), (3, 1), (5, 1)]);
-        assert_eq!(x.count(), 4);
-        x.observe(0);
+        assert_eq!(x.len(), 4);
+        x.add(0);
         assert_eq!(&x.samples.as_slice(), &[(0, 2), (1, 1), (3, 1), (5, 1)]);
-        assert_eq!(x.count(), 5);
+        assert_eq!(x.len(), 5);
     }
 
     /// Verifies that insertions at the end of the list work as expected.
@@ -578,12 +529,13 @@ mod tests {
         let mut x: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (3, 1), (5, 1)],
         };
-        x.observe(6);
+        assert_eq!(x.len(), 3);
+        x.add(6);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1), (5, 1), (6, 1)]);
-        assert_eq!(x.count(), 4);
-        x.observe(6);
+        assert_eq!(x.len(), 4);
+        x.add(6);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 1), (5, 1), (6, 2)]);
-        assert_eq!(x.count(), 5);
+        assert_eq!(x.len(), 5);
     }
 
     #[test]
@@ -591,36 +543,37 @@ mod tests {
         let mut x: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (3, 2), (5, 2)],
         };
-        x.observe(2);
+        assert_eq!(x.len(), 5);
+        x.add(2);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (2, 1), (3, 2), (5, 2)]);
-        assert_eq!(x.count(), 6);
-        x.observe(2);
+        assert_eq!(x.len(), 6);
+        x.add(2);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (2, 2), (3, 2), (5, 2)]);
-        assert_eq!(x.count(), 7);
+        assert_eq!(x.len(), 7);
     }
 
     #[test]
     fn merge() {
         let mut x: ECDF<i32> = ECDF::default();
-        assert_eq!(x.count(), 0);
+        assert_eq!(x.len(), 0);
 
         let empty: ECDF<i32> = ECDF::default();
         x.merge_sorted(empty.samples.iter());
-        assert_eq!(x.count(), 0);
+        assert_eq!(x.len(), 0);
 
         let mut y: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1)],
         };
-        assert_eq!(y.count(), 3);
+        assert_eq!(y.len(), 3);
         y.merge_sorted(empty.samples.iter());
-        assert_eq!(y.count(), 3);
+        assert_eq!(y.len(), 3);
 
         let mut not_empty = ECDF {
             samples: vec![(0, 1)],
         };
         y.merge_sorted(not_empty.samples.iter());
         assert_eq!(&y.samples.as_slice(), &[(0, 1), (1, 1), (2, 1), (3, 1)]);
-        assert_eq!(y.count(), 4);
+        assert_eq!(y.len(), 4);
         not_empty = ECDF {
             samples: vec![(4, 1)],
         };
@@ -629,7 +582,7 @@ mod tests {
             &y.samples.as_slice(),
             &[(0, 1), (1, 1), (2, 1), (3, 1), (4, 1)]
         );
-        assert_eq!(y.count(), 5);
+        assert_eq!(y.len(), 5);
     }
 
     /// Verifies correct behavior when samples are in a straight line.
@@ -640,7 +593,7 @@ mod tests {
         };
         x.compact_to(4);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 2), (4, 1), (5, 1)]);
-        assert_eq!(x.count(), 5);
+        assert_eq!(x.len(), 5);
     }
 
     /// Verifies that the minimum size post-compaction is 3: (min, ???, max)
@@ -651,7 +604,7 @@ mod tests {
         };
         x.compact_to(1);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (4, 3), (5, 1)]);
-        assert_eq!(x.count(), 5);
+        assert_eq!(x.len(), 5);
     }
 
     /// Verifies that a compaction is a no-op if the target size is greater than the current size.
@@ -665,13 +618,13 @@ mod tests {
             &x.samples.as_slice(),
             &[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]
         );
-        assert_eq!(x.count(), 5);
+        assert_eq!(x.len(), 5);
         x.compact_to(100);
         assert_eq!(
             &x.samples.as_slice(),
             &[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]
         );
-        assert_eq!(x.count(), 5);
+        assert_eq!(x.len(), 5);
     }
 
     /// Performs compactions with non-zero errors.
@@ -682,7 +635,7 @@ mod tests {
         };
         x.compact_to(4);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 3), (4, 4), (5, 10)]);
-        assert_eq!(x.count(), 18);
+        assert_eq!(x.len(), 18);
 
         x = ECDF {
             samples: vec![
@@ -695,13 +648,13 @@ mod tests {
                 (100, 100),
             ],
         };
-        let before = x.count();
+        let before = x.len();
         x.compact_to(4);
         assert_eq!(
             &x.samples.as_slice(),
             &[(1, 10), (4, 9), (25, 11), (100, 100)]
         );
-        assert_eq!(x.count(), before);
+        assert_eq!(x.len(), before);
     }
 
     #[test]
