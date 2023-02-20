@@ -58,17 +58,15 @@ impl Metrics {
             if ticks < 10 {
                 return Ok(());
             }
-            self.cpu_user.add(
-                ((ks.total.user - last_ks.total.user) as f64) / (ticks as f64),
-                1,
-            );
+            self.cpu_user
+                .add(((ks.total.user - last_ks.total.user) as f64) / (ticks as f64));
         }
         self.last_kernel = Some(ks);
 
         let ps = Process::myself()?.stat()?;
         if let Some(last_ps) = &self.last_process {
-            self.self_user.add(ps.utime - last_ps.utime, 1);
-            self.self_system.add(ps.stime - last_ps.stime, 1);
+            self.self_user.add(ps.utime - last_ps.utime);
+            self.self_system.add(ps.stime - last_ps.stime);
         }
         self.last_process = Some(ps);
         Ok(())
