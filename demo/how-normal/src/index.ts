@@ -290,18 +290,6 @@ class App {
   private gamma: HTMLInputElement;
 
   constructor() {
-    let cdf = <HTMLCanvasElement>document.getElementById('cdf')
-    resizeCanvasToDisplaySize(cdf);
-    let graph = new CDFGraph(cdf);
-    cdf.addEventListener('mousemove', function(e) {
-       graph.onMouseMove(e);
-    }, false);
-    cdf.addEventListener('resize', function(e) {
-      resizeCanvasToDisplaySize(cdf);
-      graph.onResize(e);
-    }, false);
-    graph.onResize();
-    this.cdfGraph = graph;
     this.sample = [];
     this.gamma = <HTMLInputElement>document.getElementById('gamma');
     this.gamma.oninput = (e) => { this.onSlider(e); };
@@ -405,9 +393,6 @@ class App {
     let cdf = <HTMLCanvasElement>document.getElementById('cdf')
     resizeCanvasToDisplaySize(cdf);
     let graph = new CDFGraph(cdf);
-    cdf.addEventListener('mousemove', function(e) {
-       graph.onMouseMove(e);
-    }, false);
     cdf.addEventListener('resize', function(e) {
       resizeCanvasToDisplaySize(cdf);
       graph.onResize(e);

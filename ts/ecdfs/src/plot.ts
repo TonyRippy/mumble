@@ -306,34 +306,4 @@ export class CDFGraph {
       }
     }
   }
-
-  public onMouseMove (e: MouseEvent): void {
-    const cx = e.offsetX // get mouse x and adjust for el.
-    const cy = e.offsetY // get mouse y and adjust for el.
-
-    const fx = this.cx2fx.eval(cx)
-    const fy = this.cy2fy.eval(cy)
-
-    const mt = document.getElementById('mouse-text')
-    if (mt == null) throw new Error('Unable to find mouse-text element!')
-    mt.innerText = `X: ${fx}, Y: ${fy}`
-
-    // if (this.ecdfImage) {
-    //   let w = this.canvas.width;
-    //   let h = this.canvas.height;
-    //   let ctx = this.canvas.getContext('2d');
-    //   ctx.putImageData(this.ecdfImage, 0, 0);
-    //   ctx.strokeStyle = 'yellow';
-    //   let cx = x;
-    //   let cy = this.ys[x];
-    //   ctx.beginPath();
-    //   ctx.moveTo(cx, h-1);
-    //   ctx.lineTo(cx, cy);
-    //   ctx.stroke();
-    //   ctx.fillStyle = 'yellow';
-    //   ctx.beginPath();
-    //   ctx.arc(cx, cy, 2, 0, 2 * Math.PI);
-    //   ctx.fill();
-    // }
-  }
 }
