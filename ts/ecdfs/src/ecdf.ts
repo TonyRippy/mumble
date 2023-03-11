@@ -20,7 +20,7 @@ export class ECDF {
   x: number[];
   h: number[];
   n: number;
-  
+
   constructor() {
     this.x = [];
     this.h = [];
@@ -47,7 +47,7 @@ export class ECDF {
     }
     return Math.sqrt(sum / (count - 1));
   }
-  
+
   binarySearch(v: number, min: number, max: number): number {
     if (min >= max) {
       return min;
@@ -65,7 +65,7 @@ export class ECDF {
     }
     return this.binarySearch(v, m, max);
   }
-  
+
   public addSample(v: number) {
     let i = this.binarySearch(v, 0, this.n);
     if (i < 0) {
@@ -77,9 +77,6 @@ export class ECDF {
     this.x.splice(i, 0, v);
     this.h.splice(i, 0, 1);
     this.n += 1;
-  }
-
-  public addJSON(json: Array<[number, number]>) {
   }
 
   public getRawCDF(): Plot {
@@ -115,7 +112,7 @@ export class ECDF {
       maxY: 1
     };
   }
-  
+
   public getLinearCDF(): Plot {
     let root = startSegment();
     if (this.n == 0) {
@@ -163,7 +160,7 @@ export class ECDF {
       maxY: 1
     };
   }
-  
+
   public getCubicCDF(): Plot {
     if (this.n < 2) {
       return this.getLinearCDF();
@@ -203,7 +200,7 @@ export class ECDF {
       maxY: 1
     };
   }
-  
+
   // // Caluclates the point where the linear interpolation hits zero.
   // getMin(): number {
   //   /*
@@ -229,4 +226,63 @@ export class ECDF {
   //   let d = 2 * t / y;
   //   return this.x[0] - d;
   // }
+}
+
+export function fromJSON(json: Array<[number, number]>): ECDF {
+  let x = new Array<number>(json.length);
+  let h = new Array<number>(json.length);
+  for (let i = 0; i < json.length; i++) {
+    let sample = json[i];
+    x[i] = sample[0];
+    h[i] = sample[1];
+  }
+  let out = new ECDF();
+  out.x = x;
+  out.h = h;
+  out.n = json.length;
+  return out;
+}
+
+export function toJSON(ecdf: ECDF): Array<[number, number]> {
+  let out = new Array<[number, number]>(ecdf.n);
+  for (let i = 0; i < ecdf.n; i++) {
+    out[i] = [ecdf.x[i], ecdf.h[i]];
+  }
+  return out;
+}
+
+export function merge(a: ECDF, b: ECDF): ECDF {
+  let out = new ECDF();
+  let ai = 0;
+  let bi = 0;
+  while (ai < a.n && bi < b.n) {
+    let ax = a.x[ai];
+    let bx = b.x[bi];
+    if (ax < bx) {
+      out.x.push(ax);
+      out.h.push(a.h[ai]);
+      ai += 1;
+    } else if (ax > bx) {
+      out.x.push(bx);
+      out.h.push(b.h[bi]);
+      bi += 1;
+    } else {
+      out.x.push(ax);
+      out.h.push(a.h[ai] + b.h[bi]);
+      ai += 1;
+      bi += 1;
+    }
+  }
+  while (ai < a.n) {
+    out.x.push(a.x[ai]);
+    out.h.push(a.h[ai]);
+    ai += 1;
+  }
+  while (bi < b.n) {
+    out.x.push(b.x[bi]);
+    out.h.push(b.h[bi]);
+    bi += 1;
+  }
+  out.n = out.x.length;
+  return out;
 }

@@ -14,6 +14,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export { Func, linearFunction } from './func';
-export { ECDF } from './ecdf';
-export { Layer, CDFGraph, getRenderFuncForPlot, getRenderFuncForFunction } from "./plot";
+export {
+  Func,
+  linearFunction,
+} from './func';
+
+export {
+  ECDF,
+  fromJSON,
+  toJSON,
+  merge,
+} from './ecdf';
+
+export {
+  Layer,
+  CDFGraph,
+  getRenderFuncForPlot,
+  getRenderFuncForFunction,
+} from "./plot";
