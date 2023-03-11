@@ -16,10 +16,6 @@
 import { ConstFunc, linearFunction, cubicFunction, FritschCarlsonTangents }  from "./func";
 import { Plot, startSegment, findFrontTail, findBackTail } from "./plot";
 
-// Problem case
-// x = [1, 1.5, 1.6, 2]
-// h = [1, 1,   1,   3]
-
 export class ECDF {
   x: number[];
   h: number[];

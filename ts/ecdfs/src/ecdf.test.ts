@@ -25,4 +25,8 @@ describe('ECDF', () => {
     expect(ecdf.n).to.equal(3);
   });
 
+  // Problem case
+  // x = [1, 1.5, 1.6, 2]
+  // h = [1, 1,   1,   3]
+
 });
