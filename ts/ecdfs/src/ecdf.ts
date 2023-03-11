@@ -13,136 +13,136 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ConstFunc, linearFunction, cubicFunction, FritschCarlsonTangents }  from "./func";
-import { Plot, startSegment, findFrontTail, findBackTail } from "./plot";
+import { ConstFunc, linearFunction, cubicFunction, FritschCarlsonTangents } from './func'
+import { type Plot, startSegment, findFrontTail, findBackTail } from './plot'
 
 export class ECDF {
-  x: number[];
-  h: number[];
-  n: number;
+  x: number[]
+  h: number[]
+  n: number
 
-  constructor() {
-    this.x = [];
-    this.h = [];
-    this.n = 0;
+  constructor () {
+    this.x = []
+    this.h = []
+    this.n = 0
   }
 
-  public mean(): number {
-    let sum = 0;
-    let count = 0;
+  public mean (): number {
+    let sum = 0
+    let count = 0
     for (let i = 0; i < this.n; i++) {
-      sum += this.x[i] * this.h[i];
-      count += this.h[i];
+      sum += this.x[i] * this.h[i]
+      count += this.h[i]
     }
-    return sum / count;
+    return sum / count
   }
 
-  public stddev(mean: number): number {
-    let sum = 0;
-    let count = 0;
+  public stddev (mean: number): number {
+    let sum = 0
+    let count = 0
     for (let i = 0; i < this.n; i++) {
-      let err = this.x[i] - mean;
-      sum += err * err * this.h[i];
-      count += this.h[i];
+      const err = this.x[i] - mean
+      sum += err * err * this.h[i]
+      count += this.h[i]
     }
-    return Math.sqrt(sum / (count - 1));
+    return Math.sqrt(sum / (count - 1))
   }
 
-  binarySearch(v: number, min: number, max: number): number {
+  binarySearch (v: number, min: number, max: number): number {
     if (min >= max) {
-      return min;
+      return min
     }
-    let m = (min + max) >> 1;
-    let mv = this.x[m];
-    if (v == mv) {
-      return -(m+1);
+    const m = (min + max) >> 1
+    const mv = this.x[m]
+    if (v === mv) {
+      return -(m + 1)
     }
     if (v < mv) {
-      return this.binarySearch(v, min, m);
+      return this.binarySearch(v, min, m)
     }
-    if (m == min) {
-      return max;
+    if (m === min) {
+      return max
     }
-    return this.binarySearch(v, m, max);
+    return this.binarySearch(v, m, max)
   }
 
-  public addSample(v: number) {
-    let i = this.binarySearch(v, 0, this.n);
+  public addSample (v: number): void {
+    const i = this.binarySearch(v, 0, this.n)
     if (i < 0) {
       // We found a match. Rather than inserting, we'll just increase the count.
-      this.h[-i-1] += 1;
-      return;
+      this.h[-i - 1] += 1
+      return
     }
     // Insert a new sample at the correct position in the arrays.
-    this.x.splice(i, 0, v);
-    this.h.splice(i, 0, 1);
-    this.n += 1;
+    this.x.splice(i, 0, v)
+    this.h.splice(i, 0, 1)
+    this.n += 1
   }
 
-  public getRawCDF(): Plot {
-    let root = startSegment();
-    let s = root;
-    let n = 0;
+  public getRawCDF (): Plot {
+    const root = startSegment()
+    let s = root
+    let n = 0
     for (let i = 0; i < this.n; i++) {
-      n += this.h[i];
+      n += this.h[i]
     }
-    let h = 0;
+    let h = 0
     for (let i = 0; i < this.n; i++) {
-      let xx = this.x[i];
-      h += this.h[i];
-      let hh = h / n;
-      s.next = {x: xx, f: new ConstFunc(hh), next: null};
-      s = s.next;
+      const xx = this.x[i]
+      h += this.h[i]
+      const hh = h / n
+      s.next = { x: xx, f: new ConstFunc(hh), next: null }
+      s = s.next
     }
-    let minx = this.n == 0 ? 0 : this.x[0];
-    let maxx = minx;
+    let minx = this.n === 0 ? 0 : this.x[0]
+    let maxx = minx
     if (this.n <= 1) {
-      maxx += 2;
-      minx -= 2;
+      maxx += 2
+      minx -= 2
     } else {
-      maxx = this.x[this.n-1];
-      let margin  = (maxx - minx) * 0.15;
-      minx -= margin;
-      maxx += margin;
+      maxx = this.x[this.n - 1]
+      const margin = (maxx - minx) * 0.15
+      minx -= margin
+      maxx += margin
     }
     return {
       segments: root,
       minX: minx,
       maxX: maxx,
       maxY: 1
-    };
+    }
   }
 
-  public getLinearCDF(): Plot {
-    let root = startSegment();
-    if (this.n == 0) {
+  public getLinearCDF (): Plot {
+    const root = startSegment()
+    if (this.n === 0) {
       return {
         segments: root,
         minX: 0,
         maxX: 1,
         maxY: 1
-      };
+      }
     }
-    let s = root;
-    let n = 0;
+    let s = root
+    let n = 0
     for (let i = 0; i < this.n; i++) {
-      n += this.h[i];
+      n += this.h[i]
     }
-    let lx = this.x[0] - 2;
-    let ly = 0;
-    let h = 0;
+    let lx = this.x[0] - 2
+    let ly = 0
+    let h = 0
     for (let i = 0; i < this.n; i++) {
-      let xx = this.x[i];
-      h += this.h[i];
-      let yy = h / (n+1);
+      const xx = this.x[i]
+      h += this.h[i]
+      const yy = h / (n + 1)
       s.next = {
         x: lx,
         f: linearFunction(lx, ly, xx, yy),
         next: null
-      };
-      s = s.next;
-      lx = xx;
-      ly = yy;
+      }
+      s = s.next
+      lx = xx
+      ly = yy
     }
     s.next = {
       x: lx,
@@ -152,53 +152,59 @@ export class ECDF {
         f: new ConstFunc(1),
         next: null
       }
-    };
+    }
     return {
       segments: root,
       minX: this.x[0] - 2,
       maxX: lx + 2,
       maxY: 1
-    };
+    }
   }
 
-  public getCubicCDF(): Plot {
+  public getCubicCDF (): Plot {
     if (this.n < 2) {
-      return this.getLinearCDF();
+      return this.getLinearCDF()
     }
-    let n = 0;
+    let n = 0
     for (let i = 0; i < this.n; i++) {
-      n += this.h[i];
+      n += this.h[i]
     }
-    let ys = new Array<number>(this.x.length);
-    let h = 0;
+    const ys = new Array<number>(this.x.length)
+    let h = 0
     for (let i = 0; i < this.n; i++) {
-      h += this.h[i];
-      ys[i] = h / (n+1);
+      h += this.h[i]
+      ys[i] = h / (n + 1)
     }
-    let dys = FritschCarlsonTangents(this.x, ys);
-    let root = startSegment();
-    let s = root;
-    s.next = findFrontTail(this.x[0], ys[0], dys[0]);
-    s = s.next;
-    let frontX = s.x;
-    let i = 0;
+    const dys = FritschCarlsonTangents(this.x, ys)
+    const root = startSegment()
+    let s = root
+    s.next = findFrontTail(this.x[0], ys[0], dys[0])
+    s = s.next
+    const frontX = s.x
+    let i = 0
     for (; i < this.n - 1; i++) {
       s.next = {
         x: this.x[i],
         f: cubicFunction(this.x[i], ys[i], dys[i],
-                         this.x[i+1], ys[i+1], dys[i+1]),
+          this.x[i + 1], ys[i + 1], dys[i + 1]),
         next: null
-      };
-      s = s.next;
+      }
+      s = s.next
     }
-    s.next = findBackTail(this.x[i], ys[i], dys[i]);
-    let backX = s.next.next.x;
+    s.next = findBackTail(this.x[i], ys[i], dys[i])
+    if (s.next != null) {
+      s = s.next
+    }
+    if (s.next != null) {
+      s = s.next
+    }
+    const backX = s.x
     return {
       segments: root,
       minX: frontX,
       maxX: backX,
       maxY: 1
-    };
+    }
   }
 
   // // Caluclates the point where the linear interpolation hits zero.
@@ -228,61 +234,61 @@ export class ECDF {
   // }
 }
 
-export function fromJSON(json: Array<[number, number]>): ECDF {
-  let x = new Array<number>(json.length);
-  let h = new Array<number>(json.length);
+export function fromJSON (json: Array<[number, number]>): ECDF {
+  const x = new Array<number>(json.length)
+  const h = new Array<number>(json.length)
   for (let i = 0; i < json.length; i++) {
-    let sample = json[i];
-    x[i] = sample[0];
-    h[i] = sample[1];
+    const sample = json[i]
+    x[i] = sample[0]
+    h[i] = sample[1]
   }
-  let out = new ECDF();
-  out.x = x;
-  out.h = h;
-  out.n = json.length;
-  return out;
+  const out = new ECDF()
+  out.x = x
+  out.h = h
+  out.n = json.length
+  return out
 }
 
-export function toJSON(ecdf: ECDF): Array<[number, number]> {
-  let out = new Array<[number, number]>(ecdf.n);
+export function toJSON (ecdf: ECDF): Array<[number, number]> {
+  const out = new Array<[number, number]>(ecdf.n)
   for (let i = 0; i < ecdf.n; i++) {
-    out[i] = [ecdf.x[i], ecdf.h[i]];
+    out[i] = [ecdf.x[i], ecdf.h[i]]
   }
-  return out;
+  return out
 }
 
-export function merge(a: ECDF, b: ECDF): ECDF {
-  let out = new ECDF();
-  let ai = 0;
-  let bi = 0;
+export function merge (a: ECDF, b: ECDF): ECDF {
+  const out = new ECDF()
+  let ai = 0
+  let bi = 0
   while (ai < a.n && bi < b.n) {
-    let ax = a.x[ai];
-    let bx = b.x[bi];
+    const ax = a.x[ai]
+    const bx = b.x[bi]
     if (ax < bx) {
-      out.x.push(ax);
-      out.h.push(a.h[ai]);
-      ai += 1;
+      out.x.push(ax)
+      out.h.push(a.h[ai])
+      ai += 1
     } else if (ax > bx) {
-      out.x.push(bx);
-      out.h.push(b.h[bi]);
-      bi += 1;
+      out.x.push(bx)
+      out.h.push(b.h[bi])
+      bi += 1
     } else {
-      out.x.push(ax);
-      out.h.push(a.h[ai] + b.h[bi]);
-      ai += 1;
-      bi += 1;
+      out.x.push(ax)
+      out.h.push(a.h[ai] + b.h[bi])
+      ai += 1
+      bi += 1
     }
   }
   while (ai < a.n) {
-    out.x.push(a.x[ai]);
-    out.h.push(a.h[ai]);
-    ai += 1;
+    out.x.push(a.x[ai])
+    out.h.push(a.h[ai])
+    ai += 1
   }
   while (bi < b.n) {
-    out.x.push(b.x[bi]);
-    out.h.push(b.h[bi]);
-    bi += 1;
+    out.x.push(b.x[bi])
+    out.h.push(b.h[bi])
+    bi += 1
   }
-  out.n = out.x.length;
-  return out;
+  out.n = out.x.length
+  return out
 }

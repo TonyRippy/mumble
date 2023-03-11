@@ -15,20 +15,20 @@
 // limitations under the License.
 
 export {
-  Func,
-  linearFunction,
-} from './func';
+  type Func,
+  linearFunction
+} from './func'
 
 export {
   ECDF,
   fromJSON,
   toJSON,
-  merge,
-} from './ecdf';
+  merge
+} from './ecdf'
 
 export {
   Layer,
   CDFGraph,
   getRenderFuncForPlot,
-  getRenderFuncForFunction,
-} from "./plot";
+  getRenderFuncForFunction
+} from './plot'
