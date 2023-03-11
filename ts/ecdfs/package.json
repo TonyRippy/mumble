@@ -4,6 +4,7 @@
   "author": "Tony Rippy <tonyrippy@gmail.com>",
   "description": "A typescript library for loading and manipulating ECDFs.",
   "private": true,
+  "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [

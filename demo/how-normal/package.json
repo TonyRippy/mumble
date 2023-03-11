@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "description": "A simple tool to test how normal your data really is.",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "start": "webpack-dev-server --open",
     "test": "echo \"Error: no test specified\" && exit 1",
