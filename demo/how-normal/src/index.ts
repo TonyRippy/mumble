@@ -4,7 +4,7 @@ export default {
 };
 
 import { PrometheusDriver, SampleValue } from 'prometheus-query';
-import { Func, linearFunction, ECDF, getRenderFuncForPlot, getRenderFuncForFunction, Layer, CDFGraph } from "./ecdf";
+import { Func, linearFunction, ECDF, getRenderFuncForPlot, getRenderFuncForFunction, Layer, CDFGraph } from 'ecdfs';
 import { CDF } from "./cdf";
 import { Normal, LogNormal } from "./gaussian";
 import { KSTest } from "./kolmogorov";

@@ -9,6 +9,7 @@
     "build": "webpack"
   },
   "dependencies": {
+    "ecdfs": "file:../../ts/ecdfs",
     "mdb-ui-kit": "^6.0.1",
     "prometheus-query": "^3.3.0"
   },
