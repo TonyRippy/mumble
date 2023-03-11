@@ -287,7 +287,8 @@ export class CDFGraph {
     const ctx = this.canvas.getContext('2d')
     if (ctx == null) throw new Error('Unable to create 2d context!')
     ctx.clearRect(0, 0, w, h)
-    for (const layer of this.layers) {
+    for (let i = 0; i < this.layers.length; i++) {
+      const layer = this.layers[i]
       if (layer.image == null) {
         layer.image = layer.render(w, h, this.cx2fx, this.fy2cy)
       }
