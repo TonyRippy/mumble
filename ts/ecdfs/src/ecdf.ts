@@ -79,6 +79,45 @@ export class ECDF {
     this.n += 1
   }
 
+  public merge (other: ECDF): void {
+    if (other.n === 0) return
+    const x = new Array<number>()
+    const h = new Array<number>()
+    let si = 0
+    let oi = 0
+    while (si < this.n && oi < other.n) {
+      const sx = this.x[si]
+      const ox = other.x[oi]
+      if (sx < ox) {
+        x.push(sx)
+        h.push(this.h[si])
+        si += 1
+      } else if (sx > ox) {
+        x.push(ox)
+        h.push(other.h[oi])
+        oi += 1
+      } else {
+        x.push(sx)
+        h.push(this.h[si] + other.h[oi])
+        si += 1
+        oi += 1
+      }
+    }
+    while (si < this.n) {
+      x.push(this.x[si])
+      h.push(this.h[si])
+      si += 1
+    }
+    while (oi < other.n) {
+      x.push(other.x[oi])
+      h.push(other.h[oi])
+      oi += 1
+    }
+    this.x = x
+    this.h = h
+    this.n = x.length
+  }
+
   public getRawCDF (): Plot {
     const root = startSegment()
     let s = root
@@ -254,41 +293,5 @@ export function toJSON (ecdf: ECDF): Array<[number, number]> {
   for (let i = 0; i < ecdf.n; i++) {
     out[i] = [ecdf.x[i], ecdf.h[i]]
   }
-  return out
-}
-
-export function merge (a: ECDF, b: ECDF): ECDF {
-  const out = new ECDF()
-  let ai = 0
-  let bi = 0
-  while (ai < a.n && bi < b.n) {
-    const ax = a.x[ai]
-    const bx = b.x[bi]
-    if (ax < bx) {
-      out.x.push(ax)
-      out.h.push(a.h[ai])
-      ai += 1
-    } else if (ax > bx) {
-      out.x.push(bx)
-      out.h.push(b.h[bi])
-      bi += 1
-    } else {
-      out.x.push(ax)
-      out.h.push(a.h[ai] + b.h[bi])
-      ai += 1
-      bi += 1
-    }
-  }
-  while (ai < a.n) {
-    out.x.push(a.x[ai])
-    out.h.push(a.h[ai])
-    ai += 1
-  }
-  while (bi < b.n) {
-    out.x.push(b.x[bi])
-    out.h.push(b.h[bi])
-    bi += 1
-  }
-  out.n = out.x.length
   return out
 }

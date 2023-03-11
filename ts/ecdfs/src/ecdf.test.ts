@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 
-import { ECDF, fromJSON, toJSON, merge } from './ecdf'
+import { ECDF, fromJSON, toJSON } from './ecdf'
 
 // import * as mocha from 'mocha'
 import * as chai from 'chai'
@@ -54,16 +54,19 @@ describe('ECDF', () => {
   it('can be merged together', () => {
     let a = new ECDF()
     let b = new ECDF()
-    expect(merge(a, b)).to.be.deep.equal(a)
+    a.merge(b)
+    expect(a).to.be.deep.equal(b)
 
     a = fromJSON([[1, 1], [2, 1]])
     b = new ECDF()
-    expect(merge(a, b)).to.be.deep.equal(a)
-    expect(merge(b, a)).to.be.deep.equal(a)
+    a.merge(b)
+    expect(a).to.be.deep.equal(
+      fromJSON([[1, 1], [2, 1]]))
 
     a = fromJSON([[1, 1], [3, 1], [5, 2]])
     b = fromJSON([[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]])
-    expect(merge(a, b)).to.be.deep.equal(
+    a.merge(b)
+    expect(a).to.be.deep.equal(
       fromJSON(
         [[0, 1], [1, 3], [2, 3], [3, 5], [4, 5], [5, 8]]))
   })

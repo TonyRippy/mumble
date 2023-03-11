@@ -22,8 +22,7 @@ export {
 export {
   ECDF,
   fromJSON,
-  toJSON,
-  merge
+  toJSON
 } from './ecdf'
 
 export {
