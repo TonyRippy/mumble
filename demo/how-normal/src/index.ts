@@ -19,30 +19,21 @@ export default {
 };
 
 import { PrometheusDriver, SampleValue } from 'prometheus-query';
-import { Func, linearFunction, ECDF, getRenderFuncForPlot, getRenderFuncForFunction, Layer, CDFGraph } from 'ecdfs';
+import {
+  Func,
+  linearFunction,
+  ECDF,
+  getRenderFuncForPlot,
+  getRenderFuncForFunction,
+  Layer,
+  CDFGraph,
+  createGraph,
+  resizeCanvasToDisplaySize
+} from 'ecdfs';
 import { CDF } from "./cdf";
 import { Normal, LogNormal } from "./gaussian";
 import { KSTest } from "./kolmogorov";
 import { viridis } from "./colormap";
-
-function resizeCanvasToDisplaySize(canvas) {
-  // Lookup the size the browser is displaying the canvas in CSS pixels.
-  const dpr = window.devicePixelRatio;
-  const displayWidth  = Math.floor(canvas.clientWidth * dpr);
-  const displayHeight = Math.floor(canvas.clientHeight * dpr);
-
-  // Check if the canvas is not the same size.
-  const needResize = canvas.width  !== displayWidth ||
-    canvas.height !== displayHeight;
-
-  if (needResize) {
-    // Make the canvas the same size
-    canvas.width  = displayWidth;
-    canvas.height = displayHeight;
-  }
-
-  return needResize;
-}
 
 function getCdfFactory() {
   let distSelect = <HTMLSelectElement>document.getElementById('distype')
@@ -376,8 +367,9 @@ class App {
     let ks = new KSPlot(ksCanvas, this.mean, this.stddev, sample, getCdfFactory(), this.getGamma());
 
     ksCanvas.addEventListener('resize', function(e) {
-      resizeCanvasToDisplaySize(ksCanvas);
-      ks.onResize();
+      if (resizeCanvasToDisplaySize(ksCanvas)) {
+        ks.onResize();
+      }
     }, false);
     this.ksPlot = ks;
     ksCanvas.onmousedown = (e) => this.onMouseDown(e);
@@ -390,14 +382,7 @@ class App {
       'p = ' + select.p;
 
     // Build the CDF Plot
-    let cdf = <HTMLCanvasElement>document.getElementById('cdf')
-    resizeCanvasToDisplaySize(cdf);
-    let graph = new CDFGraph(cdf);
-    cdf.addEventListener('resize', function(e) {
-      resizeCanvasToDisplaySize(cdf);
-      graph.onResize(e);
-    }, false);
-    graph.onResize();
+    let graph = createGraph('cdf')
     this.cdfGraph = graph;
     this.sample = [];
 

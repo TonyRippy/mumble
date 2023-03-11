@@ -307,3 +307,34 @@ export class CDFGraph {
     }
   }
 }
+
+export function resizeCanvasToDisplaySize (canvas: HTMLCanvasElement): boolean {
+  // Lookup the size the browser is displaying the canvas in CSS pixels.
+  const dpr = window.devicePixelRatio
+  const displayWidth = Math.floor(canvas.clientWidth * dpr)
+  const displayHeight = Math.floor(canvas.clientHeight * dpr)
+
+  // Check if the canvas is the same size as before:
+  if (canvas.width === displayWidth && canvas.height === displayHeight) {
+    // Nothing to do!
+    return false
+  }
+
+  // Otherwise, adjust the canvas:
+  canvas.width = displayWidth
+  canvas.height = displayHeight
+  return true
+}
+
+export function createGraph (id: string): CDFGraph {
+  const cdf = document.getElementById(id) as HTMLCanvasElement
+  resizeCanvasToDisplaySize(cdf)
+  const graph = new CDFGraph(cdf)
+  cdf.addEventListener('resize', function (e) {
+    if (resizeCanvasToDisplaySize(cdf)) {
+      graph.onResize(e)
+    }
+  }, false)
+  graph.onResize()
+  return graph
+}

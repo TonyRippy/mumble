@@ -29,5 +29,7 @@ export {
   Layer,
   CDFGraph,
   getRenderFuncForPlot,
-  getRenderFuncForFunction
+  getRenderFuncForFunction,
+  resizeCanvasToDisplaySize,
+  createGraph
 } from './plot'
