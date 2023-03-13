@@ -19,6 +19,7 @@ use mumble::ecdf::ECDF;
 use mumble::ui;
 use procfs::process::{Process, Stat};
 use procfs::{CpuTime, KernelStats, ProcResult};
+use serde::Serialize;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::runtime;
@@ -26,7 +27,16 @@ use tokio::signal;
 use tokio::task;
 use tokio::time::{Instant, MissedTickBehavior};
 
-#[derive(Debug, Default)]
+#[derive(Serialize)]
+struct MetricUpdate<'a, V>
+where
+    V: Serialize,
+{
+    id: usize,
+    ecdf: &'a ECDF<V>,
+}
+
+#[derive(Default)]
 struct Metrics {
     last_kernel: Option<KernelStats>,
     last_process: Option<Stat>,
@@ -72,7 +82,11 @@ impl Metrics {
         Ok(())
     }
     fn compact(&mut self) {
-        println!("{}", serde_json::to_string(&self.cpu_user).unwrap());
+        let update = MetricUpdate {
+            id: 1,
+            ecdf: &self.cpu_user,
+        };
+        ui::push("update", &update);
         self.cpu_user.clear();
     }
 }
@@ -84,9 +98,9 @@ fn main() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let listener = TcpListener::bind("127.0.0.1:3000").await?;
-
         let mut metrics = Metrics::default();
+
+        let listener = TcpListener::bind("127.0.0.1:3000").await?;
 
         let mut sample_interval = tokio::time::interval(Duration::from_millis(500));
         sample_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -95,6 +109,9 @@ fn main() {
         let mut compact_interval =
             tokio::time::interval_at(Instant::now() + COMPACT_DURATION, COMPACT_DURATION);
         compact_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        let mut maintenance_interval = tokio::time::interval(ui::MAINTENANCE_INTERVAL);
+        maintenance_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         loop {
             tokio::select! {
@@ -106,6 +123,9 @@ fn main() {
                 }
                 _ = compact_interval.tick() => {
                     metrics.compact();
+                }
+                _ = maintenance_interval.tick() => {
+                    ui::maintain();
                 }
                 Ok((tcp_stream, _)) = listener.accept() => {
                     tokio::spawn(
