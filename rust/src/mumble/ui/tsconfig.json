@@ -3,11 +3,12 @@
     "outDir": "./dist/",
     "sourceMap": true,
     "module": "es6",
-    "target": "es2017",
-    "lib": ["es2017", "dom"],
+    "target": "es2021",
+    "lib": ["es2021", "dom"],
     "allowJs": true,
     "pretty": false,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "strictNullChecks": true
   },
   "include": ["src/**/*"]
 }

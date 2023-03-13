@@ -1,15 +1,23 @@
 {
   "name": "mumble-ui",
   "version": "0.0.0",
+  "author": "Tony Rippy <tonyrippy@gmail.com>",
   "description": "A basic UI that can be embedded into mumble clients.",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
+    "build": "webpack",
     "start": "webpack-dev-server --open",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack"
+    "lint": "eslint src/**/*.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^11.0.0",
+    "eslint": "^8.36.0",
+    "eslint-config-standard-with-typescript": "^34.0.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-n": "^15.6.1",
+    "eslint-plugin-promise": "^6.1.1",
     "ts-loader": "^9.4.2",
     "typescript": "^4.9.4",
     "webpack": "^5.75.0",
