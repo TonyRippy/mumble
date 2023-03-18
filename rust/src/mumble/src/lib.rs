@@ -79,13 +79,6 @@ impl MeterProvider {
             }
         }
     }
-
-    /// Push the current value of all instruments created through this provider.
-    pub fn push(&mut self) {
-        for (_, meter) in self.map.iter_mut() {
-            meter.push();
-        }
-    }
 }
 
 /// An implementation of Open Telemetry's Meter.
@@ -111,20 +104,16 @@ impl Meter {
         self.key.2.as_deref()
     }
 
-    pub fn create_histogram<T>(&mut self, name: &str) -> HistogramBuilder<T>
+    pub fn create_histogram<'a, T>(&'a mut self, name: &str) -> HistogramBuilder<T>
     where
         T: Num + ToPrimitive + PartialOrd + Copy + Debug + Default,
     {
-        HistogramBuilder::<T> {
+        HistogramBuilder::<'a, T> {
+            meter: self,
             name: name.to_string(),
             description: None,
             _marker: PhantomData,
         }
-    }
-
-    /// Push the current value of all instruments created through this Meter.
-    pub fn push(&mut self) {
-        warn!("I should have pushed some updates, but didn't.");
     }
 }
 
@@ -147,13 +136,14 @@ pub trait HistogramBuilder {
 }
  */
 
-pub struct HistogramBuilder<T> {
+pub struct HistogramBuilder<'a, T> {
+    meter: &'a mut Meter,
     name: String,
     description: Option<String>,
     _marker: marker::PhantomData<T>,
 }
 
-impl<T> HistogramBuilder<T>
+impl<'a, T> HistogramBuilder<'a, T>
 where
     T: Num + ToPrimitive + PartialOrd + Copy + Debug + Default,
 {

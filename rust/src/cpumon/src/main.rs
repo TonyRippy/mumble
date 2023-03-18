@@ -20,7 +20,7 @@ extern crate log;
 use clap::Parser;
 use env_logger::Env;
 use hyper::{server::conn::http1, service::service_fn};
-use mumble::{ui, Histogram};
+use mumble::{ui, Histogram, Instrument};
 use procfs::process::{Process, Stat};
 use procfs::{CpuTime, KernelStats, ProcResult};
 use std::io::Error;
@@ -87,6 +87,11 @@ impl Metrics {
         self.last_process = Some(ps);
         Ok(())
     }
+
+    fn push(&mut self) {
+        self.kernel_cpu.push();
+        self.process_cpu.push();
+    }
 }
 
 async fn monitoring_loop(port: u16) -> Result<(), Error> {
@@ -116,7 +121,7 @@ async fn monitoring_loop(port: u16) -> Result<(), Error> {
                 metrics.sample();
             }
             _ = push_interval.tick() => {
-                mp.push();
+                metrics.push();
             }
             _ = maintenance_interval.tick() => {
                 ui::maintain();
