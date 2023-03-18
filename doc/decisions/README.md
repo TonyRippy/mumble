@@ -15,4 +15,5 @@ Use [template.md](template.md) when adding new entries. This is based on the
 
 In order from newest to oldest:
 
+ - 2023-03-18: [Open Telemetry](open-telemetry.md)
  - 2023-01-14: [Using Rust](rust.md)
