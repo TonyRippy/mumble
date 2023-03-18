@@ -14,12 +14,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[macro_use]
+extern crate log;
+
+use env_logger::Env;
 use hyper::{server::conn::http1, service::service_fn};
-use mumble::ecdf::ECDF;
-use mumble::ui;
+use mumble::{ui, Histogram, Instrument};
 use procfs::process::{Process, Stat};
 use procfs::{CpuTime, KernelStats, ProcResult};
-use serde::Serialize;
+use std::io::Error;
+use std::process::ExitCode;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::runtime;
@@ -27,22 +31,11 @@ use tokio::signal;
 use tokio::task;
 use tokio::time::{Instant, MissedTickBehavior};
 
-#[derive(Serialize)]
-struct MetricUpdate<'a, V>
-where
-    V: Serialize,
-{
-    id: usize,
-    ecdf: &'a ECDF<V>,
-}
-
-#[derive(Default)]
 struct Metrics {
     last_kernel: Option<KernelStats>,
     last_process: Option<Stat>,
-    cpu_user: ECDF<f64>,
-    self_user: ECDF<u64>,
-    self_system: ECDF<u64>,
+    kernel_cpu: Histogram<f64>,
+    process_cpu: Histogram<u64>,
 }
 
 fn total_ticks(cpu: &CpuTime) -> u64 {
@@ -59,6 +52,15 @@ fn total_ticks(cpu: &CpuTime) -> u64 {
 }
 
 impl Metrics {
+    pub fn new(meter: &mut mumble::Meter) -> Metrics {
+        Metrics {
+            last_kernel: None,
+            last_process: None,
+            kernel_cpu: meter.create_histogram("kernel_cpu").build(),
+            process_cpu: meter.create_histogram("process_cpu").build(),
+        }
+    }
+
     fn sample(&mut self) -> ProcResult<()> {
         let ks = KernelStats::new()?;
         if let Some(last_ks) = &self.last_kernel {
@@ -68,75 +70,82 @@ impl Metrics {
             if ticks < 10 {
                 return Ok(());
             }
-            self.cpu_user
-                .add(((ks.total.user - last_ks.total.user) as f64) / (ticks as f64));
+            self.kernel_cpu.record(
+                ((ks.total.user - last_ks.total.user) as f64) / (ticks as f64),
+                None, /* user */
+            );
         }
         self.last_kernel = Some(ks);
 
         let ps = Process::myself()?.stat()?;
         if let Some(last_ps) = &self.last_process {
-            self.self_user.add(ps.utime - last_ps.utime);
-            self.self_system.add(ps.stime - last_ps.stime);
+            self.process_cpu
+                .record(ps.utime - last_ps.utime, None /* user */);
+            //self.self_system.add(ps.stime - last_ps.stime);
         }
         self.last_process = Some(ps);
         Ok(())
     }
-    fn compact(&mut self) {
-        let update = MetricUpdate {
-            id: 1,
-            ecdf: &self.cpu_user,
-        };
-        ui::push("update", &update);
-        self.cpu_user.clear();
-    }
 }
 
-fn main() {
-    let rt = runtime::Builder::new_current_thread()
+async fn monitoring_loop() -> Result<(), Error> {
+    let mut mp = mumble::MeterProvider::default();
+    let mut metrics = Metrics::new(mp.get_meter("cpumon", None, None, None));
+
+    let listener = TcpListener::bind("127.0.0.1:3000").await?;
+    info!("Listening on port 3000");
+
+    let mut sample_interval = tokio::time::interval(Duration::from_millis(500));
+    sample_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+    const PUSH_DURATION: Duration = Duration::from_secs(5);
+    let mut push_interval = tokio::time::interval_at(Instant::now() + PUSH_DURATION, PUSH_DURATION);
+    push_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+    let mut maintenance_interval = tokio::time::interval(ui::MAINTENANCE_INTERVAL);
+    maintenance_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+    loop {
+        tokio::select! {
+            _ = signal::ctrl_c() => {
+                info!("Interrupt signal received.");
+                break
+            }
+            _ = sample_interval.tick() => {
+                metrics.sample();
+            }
+            _ = push_interval.tick() => {
+                mp.push();
+            }
+            _ = maintenance_interval.tick() => {
+                ui::maintain();
+            }
+            Ok((tcp_stream, _)) = listener.accept() => {
+                tokio::spawn(
+                    http1::Builder::new()
+                        .keep_alive(true)
+                        .serve_connection(tcp_stream, service_fn(ui::serve)));
+            }
+        }
+        task::yield_now().await;
+    }
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    // Initialize logging
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
+    match runtime::Builder::new_current_thread()
         .enable_time()
         .enable_io()
         .build()
-        .unwrap();
-    rt.block_on(async {
-        let mut metrics = Metrics::default();
-
-        let listener = TcpListener::bind("127.0.0.1:3000").await?;
-
-        let mut sample_interval = tokio::time::interval(Duration::from_millis(500));
-        sample_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
-        const COMPACT_DURATION: Duration = Duration::from_secs(5);
-        let mut compact_interval =
-            tokio::time::interval_at(Instant::now() + COMPACT_DURATION, COMPACT_DURATION);
-        compact_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
-        let mut maintenance_interval = tokio::time::interval(ui::MAINTENANCE_INTERVAL);
-        maintenance_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
-        loop {
-            tokio::select! {
-                _ = signal::ctrl_c() => {
-                    break
-                }
-                _ = sample_interval.tick() => {
-                    metrics.sample();
-                }
-                _ = compact_interval.tick() => {
-                    metrics.compact();
-                }
-                _ = maintenance_interval.tick() => {
-                    ui::maintain();
-                }
-                Ok((tcp_stream, _)) = listener.accept() => {
-                    tokio::spawn(
-                        http1::Builder::new()
-                            .keep_alive(true)
-                            .serve_connection(tcp_stream, service_fn(ui::serve)));
-                }
-            }
-            task::yield_now().await;
+        .and_then(|rt| rt.block_on(monitoring_loop()))
+    {
+        Err(err) => {
+            error!("{}", err);
+            ExitCode::FAILURE
         }
-        Ok::<(), std::io::Error>(())
-    });
-    println!("Shutdown");
+        _ => ExitCode::SUCCESS,
+    }
 }

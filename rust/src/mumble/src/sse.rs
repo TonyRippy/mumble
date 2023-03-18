@@ -72,7 +72,7 @@ impl Server {
         // TODO: Send target information
         let message = format!("event: {}\ndata: {}\n\n", "target", "{}");
         client
-            .send_chunk(message)
+            .try_send_chunk(message)
             .expect("Unable to send initial target event!");
 
         self.clients.lock().unwrap().push(client);
