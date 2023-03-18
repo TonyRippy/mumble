@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version = "4.0", features = ["derive"] }
 env_logger = "0.10"
 hyper = {git = "https://github.com/hyperium/hyper", tag="v1.0.0-rc.2", features=["server", "http1"]}
 log = "0.4"

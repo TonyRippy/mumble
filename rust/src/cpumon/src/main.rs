@@ -17,9 +17,10 @@
 #[macro_use]
 extern crate log;
 
+use clap::Parser;
 use env_logger::Env;
 use hyper::{server::conn::http1, service::service_fn};
-use mumble::{ui, Histogram, Instrument};
+use mumble::{ui, Histogram};
 use procfs::process::{Process, Stat};
 use procfs::{CpuTime, KernelStats, ProcResult};
 use std::io::Error;
@@ -88,12 +89,12 @@ impl Metrics {
     }
 }
 
-async fn monitoring_loop() -> Result<(), Error> {
+async fn monitoring_loop(port: u16) -> Result<(), Error> {
     let mut mp = mumble::MeterProvider::default();
     let mut metrics = Metrics::new(mp.get_meter("cpumon", None, None, None));
 
-    let listener = TcpListener::bind("127.0.0.1:3000").await?;
-    info!("Listening on port 3000");
+    let listener = TcpListener::bind(("127.0.0.1", port)).await?;
+    info!("Listening on port {}", port);
 
     let mut sample_interval = tokio::time::interval(Duration::from_millis(500));
     sample_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -132,7 +133,16 @@ async fn monitoring_loop() -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Parser)]
+struct Cli {
+    /// Monitoring port to use.
+    #[arg(short, long, default_value_t = 9100)]
+    port: u16,
+}
+
 fn main() -> ExitCode {
+    // Parse command-line arguments
+    let args = Cli::parse();
     // Initialize logging
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -140,7 +150,7 @@ fn main() -> ExitCode {
         .enable_time()
         .enable_io()
         .build()
-        .and_then(|rt| rt.block_on(monitoring_loop()))
+        .and_then(|rt| rt.block_on(monitoring_loop(args.port)))
     {
         Err(err) => {
             error!("{}", err);
