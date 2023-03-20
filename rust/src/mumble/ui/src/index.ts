@@ -29,19 +29,21 @@ interface MetricData {
 }
 */
 
-interface UpdateData {
-  id: any
-  ecdf: Array<[number, number]>
+interface Measurement {
+    timestamp: number
+    name: string
+    attributes: object
+    value: any
 }
 
 class Metric {
   minX: number
   maxX: number
 
-  constructor (public id: number) {
+  constructor (public name: string, public attributes: object) {
   }
 
-  onUpdate (ecdf: ecdfs.ECDF): void {
+  onUpdate (timestamp: number, ecdf: ecdfs.ECDF): void {
     const text = document.getElementById('cdf-text')
     if (text !== null) text.innerText = JSON.stringify(ecdf)
 
@@ -82,13 +84,18 @@ class MonitoringTarget {
     this.metrics = new Map<any, Metric>()
   }
 
-  onUpdate (data: UpdateData): void {
-    let metric = this.metrics.get(data.id)
+  onUpdate (data: Measurement): void {
+    let key = JSON.stringify([data.name, data.attributes])
+    let metric = this.metrics.get(key)
     if (metric === undefined) {
-      metric = new Metric(data.id)
-      this.metrics.set(data.id, metric)
+      metric = new Metric(data.name, data.attributes)
+      this.metrics.set(key, metric)
     }
-    metric.onUpdate(ecdfs.fromJSON(data.ecdf))
+    if (data.name == 'kernel_cpu' && data.attributes['mode'] == 'user') {
+      metric.onUpdate(
+        data.timestamp,
+        ecdfs.fromJSON(data.value as Array<[number, number]>))
+    }
   }
 }
 
@@ -118,7 +125,8 @@ eventSource.addEventListener('update', (e: MessageEvent) => {
   if (target == null) {
     console.error('Target not initialized yet!')
   } else {
-    const data = JSON.parse(e.data) as UpdateData
+    console.debug(e.data);
+    const data = JSON.parse(e.data) as Measurement
     target.onUpdate(data)
   }
 })

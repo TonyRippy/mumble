@@ -11,5 +11,5 @@ env_logger = "0.10"
 hyper = {git = "https://github.com/hyperium/hyper", tag="v1.0.0-rc.2", features=["server", "http1"]}
 log = "0.4"
 mumble = { path = "../mumble" }
-procfs = "0.14"
+procfs = "0.15"
 tokio = {version="1", features=["macros", "net", "rt", "signal", "time"]}

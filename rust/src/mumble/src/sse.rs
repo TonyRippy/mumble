@@ -24,6 +24,9 @@ use std::convert::Infallible;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+// TODO: Create an init event that sends a client id.
+// TODO: persistent event queues that can be replayed when new clients connect.
+
 type Chunk = Result<Frame<Bytes>, Infallible>;
 type Clients = Vec<Client>;
 
@@ -54,7 +57,7 @@ impl Server {
     ) -> Result<(), serde_json::error::Error> {
         let payload = serde_json::to_string(message)?;
         let message = format!("event: {}\ndata: {}\n\n", event, payload);
-        self.send_chunk(message);
+        self.send_event(message);
         Ok(())
     }
 
@@ -63,7 +66,7 @@ impl Server {
         &self,
         _request: Request<R>,
     ) -> http::Result<Response<StreamBody<Receiver<Chunk>>>> {
-        let (tx, rx) = futures::channel::mpsc::channel(1);
+        let (tx, rx) = futures::channel::mpsc::channel(100);
         let mut client = Client {
             tx,
             first_error: None,
@@ -114,11 +117,14 @@ impl Server {
         });
     }
 
-    /// Send a given chunk to all clients.
-    fn send_chunk(&self, chunk: String) {
+    /// Send a given event to all clients.
+    fn send_event(&self, chunk: String) {
+        debug!("Sending: {}", chunk);
         let mut clients = self.clients.lock().unwrap();
         for client in clients.iter_mut() {
-            client.try_send_chunk(chunk.clone()).ok();
+            if let Err(e) = client.try_send_event(chunk.clone()) {
+                error!("Unable to send event to client: {}", e);
+            }
         }
     }
 }
@@ -132,7 +138,7 @@ struct Client {
 // TODO: Figure out how to implement a blocking send
 
 impl Client {
-    fn try_send_chunk(&mut self, chunk: String) -> Result<(), TrySendError<Chunk>> {
+    fn try_send_event(&mut self, chunk: String) -> Result<(), TrySendError<Chunk>> {
         let result = self.tx.try_send(Ok(Frame::data(Bytes::from(chunk))));
         match (&result, self.first_error) {
             (Err(_), None) => {

@@ -25,27 +25,50 @@ mod kstest;
 mod sse;
 pub mod ui;
 
+use ecdf::ECDF;
 use num_traits::{Num, ToPrimitive};
+use serde::Serialize;
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::Debug,
     marker::{self, PhantomData},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 // Open Telemetry SDK Specification:
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/sdk.md
 
-// TODO: Consider making this an enum that supports typed attributes.
-pub type AttributeValue = String;
+pub enum AttributeValue {
+    String(String),
+}
+
+impl From<&str> for AttributeValue {
+    fn from(value: &str) -> AttributeValue {
+        AttributeValue::String(value.to_string())
+    }
+}
+
+impl Serialize for AttributeValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            AttributeValue::String(v) => v.serialize(serializer),
+        }
+    }
+}
 
 // TODO: Should this instead be an array of values that map to known attributes?
 pub type Attributes = HashMap<String, AttributeValue>;
 
-// TODO: Rename to InstrumentationScope for compatibility with OTel SDK?
-type MeterKey = (String, Option<String>, Option<String>);
-
-/// The key used to identify a single stream of measurements.
-type StreamKey = (String, Option<Attributes>);
+/// A compound key that defines a namespace for [Instruments].
+#[derive(Clone, Eq, Hash, PartialEq, Serialize)]
+struct InstrumentationScope {
+    name: String,
+    version: Option<String>,
+    schema_url: Option<String>,
+}
 
 /// An implementation of Open Telemetry's MeterProvider.
 ///
@@ -53,7 +76,7 @@ type StreamKey = (String, Option<Attributes>);
 ///[Open Telemetry specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/api.md#meterprovider).
 #[derive(Default)]
 pub struct MeterProvider {
-    map: HashMap<MeterKey, Meter>,
+    map: HashMap<InstrumentationScope, Meter>,
 }
 
 impl MeterProvider {
@@ -64,7 +87,11 @@ impl MeterProvider {
         schema_url: Option<String>,
         attributes: Option<Attributes>,
     ) -> &mut Meter {
-        let key: MeterKey = (name.to_string(), version, schema_url);
+        let key = InstrumentationScope {
+            name: name.to_string(),
+            version,
+            schema_url,
+        };
         match self.map.entry(key) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => {
@@ -86,22 +113,22 @@ impl MeterProvider {
 /// For more information, see the
 /// [Open Telemetry specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/api.md#meter).
 pub struct Meter {
-    key: MeterKey,
+    key: InstrumentationScope,
     attributes: Attributes,
     // streams: HashMap<StreamKey, Sender>,
 }
 
 impl Meter {
     pub fn name(&self) -> &str {
-        self.key.0.as_str()
+        &self.key.name
     }
 
     pub fn version(&self) -> Option<&str> {
-        self.key.1.as_deref()
+        self.key.version.as_deref()
     }
 
     pub fn schema_url(&self) -> Option<&str> {
-        self.key.2.as_deref()
+        self.key.schema_url.as_deref()
     }
 
     pub fn create_histogram<'a, T>(&'a mut self, name: &str) -> HistogramBuilder<T>
@@ -112,6 +139,7 @@ impl Meter {
             meter: self,
             name: name.to_string(),
             description: None,
+            attributes: Attributes::default(),
             _marker: PhantomData,
         }
     }
@@ -120,7 +148,15 @@ impl Meter {
 pub trait Instrument {
     fn name(&self) -> &str;
     fn description(&self) -> Option<&str>;
-    fn push(&self);
+    fn push(&mut self, timestamp: u128);
+}
+
+#[derive(Serialize)]
+struct Measurement<'a, T: Serialize> {
+    timestamp: u128,
+    name: &'a str,
+    attributes: &'a Attributes,
+    value: &'a T,
 }
 
 /*
@@ -140,6 +176,7 @@ pub struct HistogramBuilder<'a, T> {
     meter: &'a mut Meter,
     name: String,
     description: Option<String>,
+    attributes: Attributes,
     _marker: marker::PhantomData<T>,
 }
 
@@ -152,11 +189,17 @@ where
         self
     }
 
+    pub fn add_attribute(mut self, name: &str, value: AttributeValue) -> Self {
+        self.attributes.insert(name.to_string(), value);
+        self
+    }
+
     pub fn build(self) -> Histogram<T> {
         Histogram::<T> {
             name: self.name,
             description: self.description,
-            ecdf: ecdf::ECDF::<T>::default(),
+            attributes: self.attributes,
+            ecdf: ECDF::default(),
         }
     }
 }
@@ -167,30 +210,53 @@ where
 {
     name: String,
     description: Option<String>,
-    ecdf: ecdf::ECDF<T>,
+    attributes: Attributes,
+    ecdf: ECDF<T>,
+}
+
+/// Returns the current time, in a format appropriate for reporting.
+pub fn get_timestamp() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
 }
 
 impl<T> Instrument for Histogram<T>
 where
-    T: Num + ToPrimitive + PartialOrd + Copy + Debug,
+    T: Num + ToPrimitive + PartialOrd + Copy + Debug + Serialize,
 {
     fn name(&self) -> &str {
         &self.name
     }
+
     fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
-    fn push(&self) {
-        warn!("Push not implemented yet!");
-        //ui::push("update", &update);
+
+    fn push(&mut self, timestamp: u128) {
+        if self.ecdf.is_empty() {
+            // Nothing to do...
+            return;
+        }
+        ui::push(
+            "update",
+            &Measurement::<ECDF<T>> {
+                timestamp,
+                name: &self.name,
+                attributes: &self.attributes,
+                value: &self.ecdf,
+            },
+        );
+        self.ecdf.clear();
     }
 }
 
 impl<T> Histogram<T>
 where
-    T: Num + ToPrimitive + PartialOrd + Copy + Debug,
+    T: Num + ToPrimitive + PartialOrd + Copy + Debug + Default,
 {
-    pub fn record(&mut self, value: T, _labels: Option<&Attributes>) {
+    pub fn record(&mut self, value: T) {
         self.ecdf.add(value)
     }
 }

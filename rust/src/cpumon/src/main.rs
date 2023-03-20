@@ -35,8 +35,18 @@ use tokio::time::{Instant, MissedTickBehavior};
 struct Metrics {
     last_kernel: Option<KernelStats>,
     last_process: Option<Stat>,
-    kernel_cpu: Histogram<f64>,
-    process_cpu: Histogram<u64>,
+    kernel_cpu_user: Histogram<f64>,
+    kernel_cpu_nice: Histogram<f64>,
+    kernel_cpu_system: Histogram<f64>,
+    kernel_cpu_idle: Histogram<f64>,
+    kernel_cpu_iowait: Histogram<f64>,
+    kernel_cpu_irq: Histogram<f64>,
+    kernel_cpu_softirq: Histogram<f64>,
+    kernel_cpu_steal: Histogram<f64>,
+    kernel_cpu_guest: Histogram<f64>,
+    kernel_cpu_guest_nice: Histogram<f64>,
+    process_cpu_user: Histogram<f64>,
+    process_cpu_system: Histogram<f64>,
 }
 
 fn total_ticks(cpu: &CpuTime) -> u64 {
@@ -57,8 +67,54 @@ impl Metrics {
         Metrics {
             last_kernel: None,
             last_process: None,
-            kernel_cpu: meter.create_histogram("kernel_cpu").build(),
-            process_cpu: meter.create_histogram("process_cpu").build(),
+            kernel_cpu_user: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "user".into())
+                .build(),
+            kernel_cpu_nice: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "nice".into())
+                .build(),
+            kernel_cpu_system: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "system".into())
+                .build(),
+            kernel_cpu_idle: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "idle".into())
+                .build(),
+            kernel_cpu_iowait: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "iowait".into())
+                .build(),
+            kernel_cpu_irq: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "irq".into())
+                .build(),
+            kernel_cpu_softirq: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "softirq".into())
+                .build(),
+            kernel_cpu_steal: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "steal".into())
+                .build(),
+            kernel_cpu_guest: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "guest".into())
+                .build(),
+            kernel_cpu_guest_nice: meter
+                .create_histogram("kernel_cpu")
+                .add_attribute("mode", "guest_nice".into())
+                .build(),
+            process_cpu_user: meter
+                .create_histogram("process_cpu")
+                .add_attribute("mode", "user".into())
+                .build(),
+            process_cpu_system: meter
+                .create_histogram("process_cpu")
+                .add_attribute("mode", "system".into())
+                .build(),
         }
     }
 
@@ -67,30 +123,68 @@ impl Metrics {
         if let Some(last_ks) = &self.last_kernel {
             // Kernel stats are given in ticks, which can be converted to seconds
             // using procfs::ticks_per_second().
-            let ticks = total_ticks(&ks.total) - total_ticks(&last_ks.total);
-            if ticks < 10 {
+            let ticks_raw = total_ticks(&ks.total) - total_ticks(&last_ks.total);
+            if ticks_raw < 10 {
                 return Ok(());
             }
-            self.kernel_cpu.record(
-                ((ks.total.user - last_ks.total.user) as f64) / (ticks as f64),
-                None, /* user */
+            let ticks = ticks_raw as f64;
+            self.kernel_cpu_user
+                .record(((ks.total.user - last_ks.total.user) as f64) / ticks);
+            self.kernel_cpu_nice
+                .record(((ks.total.nice - last_ks.total.nice) as f64) / ticks);
+            self.kernel_cpu_system
+                .record(((ks.total.system - last_ks.total.system) as f64) / ticks);
+            self.kernel_cpu_idle
+                .record(((ks.total.idle - last_ks.total.idle) as f64) / ticks);
+            self.kernel_cpu_iowait.record(
+                ((ks.total.iowait.unwrap_or(0) - last_ks.total.iowait.unwrap_or(0)) as f64) / ticks,
+            );
+            self.kernel_cpu_irq.record(
+                ((ks.total.irq.unwrap_or(0) - last_ks.total.irq.unwrap_or(0)) as f64) / ticks,
+            );
+            self.kernel_cpu_softirq.record(
+                ((ks.total.softirq.unwrap_or(0) - last_ks.total.softirq.unwrap_or(0)) as f64)
+                    / ticks,
+            );
+            self.kernel_cpu_steal.record(
+                ((ks.total.steal.unwrap_or(0) - last_ks.total.steal.unwrap_or(0)) as f64) / ticks,
+            );
+            self.kernel_cpu_guest.record(
+                ((ks.total.guest.unwrap_or(0) - last_ks.total.guest.unwrap_or(0)) as f64) / ticks,
+            );
+            self.kernel_cpu_guest_nice.record(
+                ((ks.total.guest_nice.unwrap_or(0) - last_ks.total.guest_nice.unwrap_or(0)) as f64)
+                    / ticks,
             );
         }
         self.last_kernel = Some(ks);
 
         let ps = Process::myself()?.stat()?;
         if let Some(last_ps) = &self.last_process {
-            self.process_cpu
-                .record(ps.utime - last_ps.utime, None /* user */);
-            //self.self_system.add(ps.stime - last_ps.stime);
+            let ticks = procfs::ticks_per_second() as f64;
+            self.process_cpu_user
+                .record(((ps.utime - last_ps.utime) as f64) / ticks);
+            self.process_cpu_system
+                .record(((ps.stime - last_ps.stime) as f64) / ticks);
         }
         self.last_process = Some(ps);
         Ok(())
     }
 
     fn push(&mut self) {
-        self.kernel_cpu.push();
-        self.process_cpu.push();
+        let t = mumble::get_timestamp();
+        self.kernel_cpu_user.push(t);
+        self.kernel_cpu_nice.push(t);
+        self.kernel_cpu_system.push(t);
+        self.kernel_cpu_idle.push(t);
+        self.kernel_cpu_iowait.push(t);
+        self.kernel_cpu_irq.push(t);
+        self.kernel_cpu_softirq.push(t);
+        self.kernel_cpu_steal.push(t);
+        self.kernel_cpu_guest.push(t);
+        self.kernel_cpu_guest_nice.push(t);
+        self.process_cpu_user.push(t);
+        self.process_cpu_system.push(t);
     }
 }
 
