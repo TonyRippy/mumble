@@ -75,7 +75,7 @@ impl Server {
         // TODO: Send target information
         let message = format!("event: {}\ndata: {}\n\n", "target", "{}");
         client
-            .try_send_chunk(message)
+            .try_send_event(message)
             .expect("Unable to send initial target event!");
 
         self.clients.lock().unwrap().push(client);
@@ -93,7 +93,7 @@ impl Server {
     /// This should be called regularly (e.g. every 15 minutes) to detect
     /// a disconnect of the underlying TCP connection.
     pub fn send_heartbeats(&self) {
-        self.send_chunk(":\n\n".into());
+        self.send_event(":\n\n".into());
     }
 
     /// Remove disconnected clients.
