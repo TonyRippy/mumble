@@ -82,13 +82,13 @@ pub struct MeterProvider {
 impl MeterProvider {
     pub fn get_meter(
         &mut self,
-        name: &str,
+        name: String,
         version: Option<String>,
         schema_url: Option<String>,
         attributes: Option<Attributes>,
     ) -> &mut Meter {
         let key = InstrumentationScope {
-            name: name.to_string(),
+            name,
             version,
             schema_url,
         };

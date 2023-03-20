@@ -190,7 +190,12 @@ impl Metrics {
 
 async fn monitoring_loop(port: u16) -> Result<(), Error> {
     let mut mp = mumble::MeterProvider::default();
-    let mut metrics = Metrics::new(mp.get_meter("cpumon", None, None, None));
+    let mut metrics = Metrics::new(mp.get_meter(
+        env!("CARGO_PKG_NAME").into(),
+        Some(env!("CARGO_PKG_VERSION").into()),
+        None,
+        None,
+    ));
 
     let listener = TcpListener::bind(("127.0.0.1", port)).await?;
     info!("Listening on port {}", port);
