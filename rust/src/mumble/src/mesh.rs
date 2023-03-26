@@ -21,14 +21,8 @@ use num_traits::Float;
 
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
 pub struct Point<P> {
-    x: P,
-    y: P,
-}
-
-impl<P> Point<P> {
-    pub fn new(x: P, y: P) -> Point<P> {
-        Point { x, y }
-    }
+    pub x: P,
+    pub y: P,
 }
 
 struct Circumcircle<P> {

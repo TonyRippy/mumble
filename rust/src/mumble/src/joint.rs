@@ -73,7 +73,10 @@ impl Builder {
         A: Into<f64>,
         B: Into<f64>,
     {
-        let p = Point::new(a.into(), b.into());
+        let p = Point {
+            x: a.into(),
+            y: b.into(),
+        };
         self.add_n(p, 1)
     }
 
