@@ -21,7 +21,9 @@ extern crate lazy_static;
 extern crate log;
 
 pub mod ecdf;
+pub mod joint;
 mod kstest;
+mod mesh;
 mod sse;
 pub mod ui;
 
