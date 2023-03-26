@@ -28,22 +28,28 @@ impl JointECDF {
         }
     }
 
+    pub fn p<A, B>(&self, _a: A, _b: B) -> f64 {
+        0.0
+    }
+
     /// Returns the probability distribution for `B` given that `A` is less than or equal to `a`.
-    pub fn given_a<A, B>(&self, a: A) -> &impl Fn(B) -> f64
+    pub fn given_a<'a, A, B>(&'a self, a: A) -> impl Fn(B) -> f64 + 'a
     where
         A: Into<f64>,
         B: Into<f64>,
     {
-        &|_| 0.0
+        let aa: f64 = a.into();
+        move |b| self.p(aa, b)
     }
 
     /// Returns the probability distribution `A` given an observed value `b`.
-    pub fn given_b<A, B>(&self, b: B) -> &impl Fn(A) -> f64
+    pub fn given_b<'a, A, B>(&'a self, b: B) -> impl Fn(A) -> f64 + 'a
     where
         A: Into<f64>,
         B: Into<f64>,
     {
-        &|_| 0.0
+        let bb: f64 = b.into();
+        move |a| self.p(a, bb)
     }
 }
 
