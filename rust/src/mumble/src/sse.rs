@@ -26,9 +26,6 @@ use std::convert::Infallible;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-// TODO: Create an init event that sends a client id.
-// TODO: persistent event queues that can be replayed when new clients connect.
-
 type Chunk = Result<Frame<Bytes>, Infallible>;
 
 /// Push server implementing Server-Sent Events (SSE).
@@ -45,10 +42,12 @@ impl Default for Server {
 }
 
 impl Server {
-    /// Push a message for the event to all clients.
+    /// Push an event to all clients subscribed to a channel.
     ///
-    /// The message is first serialized and then send to all registered
-    /// clients on the given channel, if any.
+    /// `message` is first serialized as JSON and then sent to all registered
+    /// clients on `channel`, if any. If `replay` is `true`, the event will
+    /// be kept in memory and replayed later to any future clients when they
+    /// first connect.
     ///
     /// Returns an error if the serialization fails.
     pub fn push<S: Serialize>(
@@ -56,7 +55,7 @@ impl Server {
         channel: &str,
         event: &str,
         message: &S,
-        permanent: bool,
+        replay: bool,
     ) -> Result<(), serde_json::error::Error> {
         let payload = serde_json::to_string(message)?;
         let message = format!("event: {}\ndata: {}\n\n", event, payload);
@@ -65,8 +64,8 @@ impl Server {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(Channel::default()),
         };
-        if permanent {
-            c.send_permanent_event(message);
+        if replay {
+            c.send_replayable_event(message);
         } else {
             c.send_event(message);
         }
@@ -117,13 +116,12 @@ impl Server {
 #[derive(Default)]
 struct Channel {
     clients: Vec<Client>,
-    persistent_events: Vec<String>,
+    replayable_events: Vec<String>,
 }
 
 impl Channel {
     pub fn add_client(&mut self, mut client: Client, last_event: usize) {
-        dbg!(&self.persistent_events);
-        for chunk in self.persistent_events.iter().skip(last_event) {
+        for chunk in self.replayable_events.iter().skip(last_event) {
             client.send_event(chunk.clone());
         }
         self.clients.push(client);
@@ -154,7 +152,7 @@ impl Channel {
         self.clients.retain(|client| {
             if let Some(first_error) = client.first_error {
                 if first_error.elapsed() > Duration::from_secs(5) {
-                    dbg!("Removing stale client");
+                    info!("Removing stale client");
                     return false;
                 }
             }
@@ -163,11 +161,10 @@ impl Channel {
     }
 
     /// Send an event to all clients.
-    pub fn send_permanent_event(&mut self, chunk: String) {
-        dbg!(&chunk);
-        let id = self.persistent_events.len() + 1;
+    pub fn send_replayable_event(&mut self, chunk: String) {
+        let id = self.replayable_events.len() + 1;
         let new_chunk = format!("id: {}\n{}", id, &chunk);
-        self.persistent_events.push(chunk);
+        self.replayable_events.push(new_chunk.clone());
         self.send_event(new_chunk);
     }
 
