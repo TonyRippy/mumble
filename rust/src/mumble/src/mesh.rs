@@ -14,6 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO: This can be generalized to multiple dimensions, not just 2D grids.
 // TODO: Mesh does a lot of copying. It should be possible to avoid this using scoped references.
 
 use derivative::Derivative;
