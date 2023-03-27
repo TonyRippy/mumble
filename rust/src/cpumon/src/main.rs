@@ -223,7 +223,7 @@ async fn monitoring_loop(port: u16) -> Result<(), Error> {
                 metrics.push();
             }
             _ = maintenance_interval.tick() => {
-                ui::maintain();
+                ui::perform_maintenance();
             }
             Ok((tcp_stream, _)) = listener.accept() => {
                 tokio::spawn(

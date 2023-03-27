@@ -15,11 +15,13 @@
 // limitations under the License.
 
 use bytes::Bytes;
-use futures::channel::mpsc::{Receiver, Sender, TrySendError};
+use futures::channel::mpsc::{Receiver, Sender};
 use http::{Request, Response};
 use http_body::Frame;
 use http_body_util::StreamBody;
 use serde::Serialize;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -28,17 +30,16 @@ use std::time::{Duration, Instant};
 // TODO: persistent event queues that can be replayed when new clients connect.
 
 type Chunk = Result<Frame<Bytes>, Infallible>;
-type Clients = Vec<Client>;
 
 /// Push server implementing Server-Sent Events (SSE).
 pub struct Server {
-    clients: Mutex<Clients>,
+    channels: Mutex<HashMap<String, Channel>>,
 }
 
 impl Default for Server {
     fn default() -> Self {
         Server {
-            clients: Mutex::new(Vec::new()),
+            channels: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -52,33 +53,51 @@ impl Server {
     /// Returns an error if the serialization fails.
     pub fn push<S: Serialize>(
         &self,
+        channel: &str,
         event: &str,
         message: &S,
+        permanent: bool,
     ) -> Result<(), serde_json::error::Error> {
         let payload = serde_json::to_string(message)?;
         let message = format!("event: {}\ndata: {}\n\n", event, payload);
-        self.send_event(message);
+        let mut channels = self.channels.lock().unwrap();
+        let c = match channels.entry(channel.to_string()) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => v.insert(Channel::default()),
+        };
+        if permanent {
+            c.send_permanent_event(message);
+        } else {
+            c.send_event(message);
+        }
         Ok(())
     }
 
     /// Initiate a new SSE stream for the given request.
     pub fn create_stream<R>(
         &self,
-        _request: Request<R>,
+        channel: &str,
+        request: Request<R>,
     ) -> http::Result<Response<StreamBody<Receiver<Chunk>>>> {
+        let last_id: usize = match request.headers().get("Last-Event-ID") {
+            None => 0,
+            Some(header) => header
+                .to_str()
+                .map(|s| s.parse::<usize>().unwrap_or(0))
+                .unwrap_or(0),
+        };
+
         let (tx, rx) = futures::channel::mpsc::channel(100);
-        let mut client = Client {
+        let client = Client {
             tx,
             first_error: None,
         };
 
-        // TODO: Send target information
-        let message = format!("event: {}\ndata: {}\n\n", "target", "{}");
-        client
-            .try_send_event(message)
-            .expect("Unable to send initial target event!");
-
-        self.clients.lock().unwrap().push(client);
+        match self.channels.lock().unwrap().entry(channel.to_string()) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => v.insert(Channel::default()),
+        }
+        .add_client(client, last_id);
 
         Response::builder()
             .header("Cache-Control", "no-cache")
@@ -88,11 +107,38 @@ impl Server {
             .body(StreamBody::new(rx))
     }
 
+    pub fn perform_maintenance(&self) {
+        for channel in self.channels.lock().unwrap().values_mut() {
+            channel.perform_maintenance();
+        }
+    }
+}
+
+#[derive(Default)]
+struct Channel {
+    clients: Vec<Client>,
+    persistent_events: Vec<String>,
+}
+
+impl Channel {
+    pub fn add_client(&mut self, mut client: Client, last_event: usize) {
+        dbg!(&self.persistent_events);
+        for chunk in self.persistent_events.iter().skip(last_event) {
+            client.send_event(chunk.clone());
+        }
+        self.clients.push(client);
+    }
+
+    pub fn perform_maintenance(&mut self) {
+        self.send_heartbeats();
+        self.remove_stale_clients();
+    }
+
     /// Send hearbeat to all clients.
     ///
     /// This should be called regularly (e.g. every 15 minutes) to detect
     /// a disconnect of the underlying TCP connection.
-    pub fn send_heartbeats(&self) {
+    fn send_heartbeats(&mut self) {
         self.send_event(":\n\n".into());
     }
 
@@ -104,9 +150,8 @@ impl Server {
     ///
     /// This function should be called regularly (e.g. together with
     /// `send_heartbeats`) to keep the memory usage low.
-    pub fn remove_stale_clients(&self) {
-        let mut clients = self.clients.lock().unwrap();
-        clients.retain(|client| {
+    fn remove_stale_clients(&mut self) {
+        self.clients.retain(|client| {
             if let Some(first_error) = client.first_error {
                 if first_error.elapsed() > Duration::from_secs(5) {
                     dbg!("Removing stale client");
@@ -117,14 +162,20 @@ impl Server {
         });
     }
 
-    /// Send a given event to all clients.
-    fn send_event(&self, chunk: String) {
-        debug!("Sending: {}", chunk);
-        let mut clients = self.clients.lock().unwrap();
-        for client in clients.iter_mut() {
-            if let Err(e) = client.try_send_event(chunk.clone()) {
-                error!("Unable to send event to client: {}", e);
-            }
+    /// Send an event to all clients.
+    pub fn send_permanent_event(&mut self, chunk: String) {
+        dbg!(&chunk);
+        let id = self.persistent_events.len() + 1;
+        let new_chunk = format!("id: {}\n{}", id, &chunk);
+        self.persistent_events.push(chunk);
+        self.send_event(new_chunk);
+    }
+
+    /// Send an event to all clients.
+    pub fn send_event(&mut self, chunk: String) {
+        debug!("Sending: {}", &chunk);
+        for client in self.clients.iter_mut() {
+            client.send_event(chunk.clone());
         }
     }
 }
@@ -138,10 +189,11 @@ struct Client {
 // TODO: Figure out how to implement a blocking send
 
 impl Client {
-    fn try_send_event(&mut self, chunk: String) -> Result<(), TrySendError<Chunk>> {
+    fn send_event(&mut self, chunk: String) {
         let result = self.tx.try_send(Ok(Frame::data(Bytes::from(chunk))));
         match (&result, self.first_error) {
-            (Err(_), None) => {
+            (Err(e), None) => {
+                error!("Unable to send event to client: {}", e);
                 // Store time when an error was first seen
                 self.first_error = Some(Instant::now());
             }
@@ -151,6 +203,5 @@ impl Client {
             }
             _ => {}
         }
-        result
     }
 }

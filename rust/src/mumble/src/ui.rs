@@ -54,18 +54,21 @@ pub async fn serve<R>(
             .header("Content-Type", "text/javascript; charset=utf-8")
             .status(StatusCode::OK)
             .body(oneshot_send(Bytes::from_static(INDEX_JS))),
-        "/push" => PUSH_SERVER.create_stream(req),
+        "/push" => PUSH_SERVER.create_stream("push", req),
         _ => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(oneshot_send(Bytes::default())),
     }
 }
 
-pub fn push<S: Serialize>(event: &str, message: &S) -> Result<(), serde_json::error::Error> {
-    PUSH_SERVER.push(event, message)
+pub fn push<S: Serialize>(
+    event: &str,
+    message: &S,
+    permanent: bool,
+) -> Result<(), serde_json::error::Error> {
+    PUSH_SERVER.push("push", event, message, permanent)
 }
 
-pub fn maintain() {
-    PUSH_SERVER.send_heartbeats();
-    PUSH_SERVER.remove_stale_clients();
+pub fn perform_maintenance() {
+    PUSH_SERVER.perform_maintenance();
 }

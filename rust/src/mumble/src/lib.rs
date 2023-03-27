@@ -94,7 +94,7 @@ impl MeterProvider {
             version,
             schema_url,
         };
-        match self.map.entry(key) {
+        let meter = match self.map.entry(key) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => {
                 let key = v.key().clone();
@@ -106,7 +106,9 @@ impl MeterProvider {
                     },
                 })
             }
-        }
+        };
+        ui::push("target", &meter.attributes, true);
+        meter
     }
 }
 
@@ -249,6 +251,7 @@ where
                 attributes: &self.attributes,
                 value: &self.ecdf,
             },
+            false,
         );
         self.ecdf.clear();
     }
