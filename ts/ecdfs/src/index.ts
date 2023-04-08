@@ -19,6 +19,15 @@ export {
   linearFunction
 } from './func'
 
+export type {
+  CDF
+} from './cdf'
+
+export {
+  Normal,
+  LogNormal
+} from './gaussian'
+
 export {
   ECDF,
   fromJSON,
@@ -33,3 +42,7 @@ export {
   resizeCanvasToDisplaySize,
   createGraph
 } from './plot'
+
+export {
+  KSTest
+} from './kolmogorov'

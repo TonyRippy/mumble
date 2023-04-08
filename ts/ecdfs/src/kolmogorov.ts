@@ -13,23 +13,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { CDF } from "./cdf";
+import { type CDF } from './cdf'
 
 // Round to nearest integer. Rounds half integers to the nearest even integer.
-function nint(x: number): number {
-	var i: number;
-	if (x >= 0) {
-		i = Math.trunc(x + 0.5);
-		if ((i & 1) != 0 && (x+0.5) == i) {
-			i -= 1;
-		}
-	} else {
-		i = Math.trunc(x - 0.5);
-		if ((i & 1) != 0 && (x - 0.5) == i) {
-			i += 1;
-		}
-	}
-	return i;
+function nint (x: number): number {
+  let i: number
+  if (x >= 0) {
+    i = Math.trunc(x + 0.5)
+    if ((i & 1) !== 0 && (x + 0.5) === i) {
+      i -= 1
+    }
+  } else {
+    i = Math.trunc(x - 0.5)
+    if ((i & 1) !== 0 && (x - 0.5) === i) {
+      i += 1
+    }
+  }
+  return i
 }
 
 /*
@@ -58,34 +58,34 @@ Ported from CERN's Root data analysis framework. (https://root.cern.ch/)
 Specifically the TMath::KolmogorovProb() function, originally written in C++.
 Source here: https://root.cern.ch/root/html/src/TMath.cxx.html
 */
-function kprob(z: number): number {
-	var p: number;
-	if (z < 0.2) {
-		p = 1;
-	} else if (z < 0.755) {
-		const w = 2.50662827;
-		// c1 - -pi**2/8, c2 = 9*c1, c3 = 25*c1
-		const c1 = -1.2337005501361697;
-		const c2 = -11.103304951225528;
-		const c3 = -30.842513753404244;
-		let v = 1.0 / (z * z);
-		p = 1 - w*(Math.exp(c1*v)+Math.exp(c2*v)+Math.exp(c3*v))/z;
-	} else if (z < 6.8116) {
-		const fj = [-2, -8, -18, -32];
-		let r = [0, 0, 0, 0];
-		let v = z * z;
-		let maxj = nint(3.0 / z);
-		if (maxj < 1) {
-			maxj = 1;
-		}
-		for (let j = 0; j < maxj; j += 1) {
-			r[j] = Math.exp(fj[j] * v);
-		}
-		p = 2 * (r[0] - r[1] + r[2] - r[3]);
-	} else {
-		p = 0;
-	}
-	return p;
+function kprob (z: number): number {
+  let p: number
+  if (z < 0.2) {
+    p = 1
+  } else if (z < 0.755) {
+    const w = 2.50662827
+    // c1 - -pi**2/8, c2 = 9*c1, c3 = 25*c1
+    const c1 = -1.2337005501361697
+    const c2 = -11.103304951225528
+    const c3 = -30.842513753404244
+    const v = 1.0 / (z * z)
+    p = 1 - w * (Math.exp(c1 * v) + Math.exp(c2 * v) + Math.exp(c3 * v)) / z
+  } else if (z < 6.8116) {
+    const fj = [-2, -8, -18, -32]
+    const r = [0, 0, 0, 0]
+    const v = z * z
+    let maxj = nint(3.0 / z)
+    if (maxj < 1) {
+      maxj = 1
+    }
+    for (let j = 0; j < maxj; j += 1) {
+      r[j] = Math.exp(fj[j] * v)
+    }
+    p = 2 * (r[0] - r[1] + r[2] - r[3])
+  } else {
+    p = 0
+  }
+  return p
 }
 
 /*
@@ -97,31 +97,31 @@ likelihood that the given sample comes from the reference distribution.
 See:
 https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test
 */
-export function KSTest(cdf: CDF, sample: number[]): number {
-	// Find the maximum difference between the sample and the reference distribution.
-  sample.sort((a,b) => a - b);
-	let max = 0.0;
-	let ip = 0.0;
-	for (let i = 0; i < sample.length; i++) {
-    const x = sample[i];
-		const p = cdf.p(x);
-		let diff = p - ip;
-		if (diff < 0) {
-			diff = -diff;
-		}
-		if (diff > max) {
-			max = diff;
-		}
-		ip = (i + 1) / sample.length;
-		diff = ip - p;
-		if (diff < 0) {
-			diff = -diff
-		}
-		if (diff > max) {
-			max = diff
-		}
-	}
-	let z = max * Math.sqrt(sample.length);
-	let p = kprob(z);
-	return p;
+export function KSTest (cdf: CDF, sample: number[]): number {
+  // Find the maximum difference between the sample and the reference distribution.
+  sample.sort((a, b) => a - b)
+  let max = 0.0
+  let ip = 0.0
+  for (let i = 0; i < sample.length; i++) {
+    const x = sample[i]
+    const p = cdf.p(x)
+    let diff = p - ip
+    if (diff < 0) {
+      diff = -diff
+    }
+    if (diff > max) {
+      max = diff
+    }
+    ip = (i + 1) / sample.length
+    diff = ip - p
+    if (diff < 0) {
+      diff = -diff
+    }
+    if (diff > max) {
+      max = diff
+    }
+  }
+  const z = max * Math.sqrt(sample.length)
+  const p = kprob(z)
+  return p
 }

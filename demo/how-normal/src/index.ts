@@ -20,19 +20,20 @@ export default {
 
 import { PrometheusDriver, SampleValue } from 'prometheus-query';
 import {
-  Func,
-  linearFunction,
-  ECDF,
-  getRenderFuncForPlot,
-  getRenderFuncForFunction,
-  Layer,
+  CDF,
   CDFGraph,
+  ECDF,
+  Func,
+  KSTest,
+  Layer,
+  LogNormal,
+  Normal,
   createGraph,
+  getRenderFuncForFunction,
+  getRenderFuncForPlot,
+  linearFunction,
   resizeCanvasToDisplaySize
 } from 'ecdfs';
-import { CDF } from "./cdf";
-import { Normal, LogNormal } from "./gaussian";
-import { KSTest } from "./kolmogorov";
 import { viridis } from "./colormap";
 
 function getCdfFactory() {

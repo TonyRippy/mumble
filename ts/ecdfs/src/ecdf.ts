@@ -13,10 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { CDF } from './cdf'
 import { ConstFunc, linearFunction, cubicFunction, FritschCarlsonTangents } from './func'
 import { type Plot, startSegment, findFrontTail, findBackTail } from './plot'
 
-export class ECDF {
+export class ECDF implements CDF {
   x: number[]
   h: number[]
   n: number
@@ -25,6 +26,22 @@ export class ECDF {
     this.x = []
     this.h = []
     this.n = 0
+  }
+
+  public min (): number {
+    if (this.n > 0) {
+      return this.x[0]
+    } else {
+      return 0.0
+    }
+  }
+
+  public max (): number {
+    if (this.n > 0) {
+      return this.x[this.n - 1]
+    } else {
+      return 0.0
+    }
   }
 
   public mean (): number {
@@ -46,6 +63,38 @@ export class ECDF {
       count += this.h[i]
     }
     return Math.sqrt(sum / (count - 1))
+  }
+
+  public p (x: number): number {
+    let i = 0
+    let count = 0
+    for (; i < this.n; i++) {
+      if (this.x[i] > x) {
+        break
+      }
+      count += this.h[i]
+    }
+    let total = count
+    for (; i < this.n; i++) {
+      total += this.h[i]
+    }
+    return count / total
+  }
+
+  public dx (x: number): number {
+    let i = this.binarySearch(x, 0, this.n)
+    if (i < 0) {
+      return this.h[-i - 1]
+    }
+    i--
+    if (i < 0) {
+      return 0
+    }
+    return this.h[i]
+  }
+
+  public toHTML (): string {
+    return ''
   }
 
   binarySearch (v: number, min: number, max: number): number {
