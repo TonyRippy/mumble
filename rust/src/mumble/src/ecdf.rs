@@ -115,12 +115,21 @@ where
         }
     }
 
-    pub fn compact_to(&mut self, mut target_size: usize) {
+    pub fn compact(&mut self, target_size: usize) {
+        self.compact_if(target_size, target_size)
+    }
+
+    pub fn compact_if(&mut self, over_size: usize, target_size: usize) {
         if target_size < 3 {
-            target_size = 3;
+            return self.compact_if(over_size, 3);
         }
         let mut len = self.samples.len();
+        if len <= over_size {
+            // Hasn't hit the threshold that would trigger compaction.
+            return;
+        }
         if len <= target_size {
+            // Already smaller than target size, nothing to do.
             return;
         }
 
@@ -704,7 +713,7 @@ mod tests {
         let mut x: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)],
         };
-        x.compact_to(4);
+        x.compact(4);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 2), (4, 1), (5, 1)]);
         assert_eq!(x.len(), 5);
     }
@@ -715,7 +724,7 @@ mod tests {
         let mut x: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)],
         };
-        x.compact_to(1);
+        x.compact(1);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (4, 3), (5, 1)]);
         assert_eq!(x.len(), 5);
     }
@@ -726,13 +735,13 @@ mod tests {
         let mut x: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)],
         };
-        x.compact_to(5);
+        x.compact(5);
         assert_eq!(
             &x.samples.as_slice(),
             &[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]
         );
         assert_eq!(x.len(), 5);
-        x.compact_to(100);
+        x.compact(100);
         assert_eq!(
             &x.samples.as_slice(),
             &[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]
@@ -746,7 +755,7 @@ mod tests {
         let mut x: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 2), (4, 4), (5, 10)],
         };
-        x.compact_to(4);
+        x.compact(4);
         assert_eq!(&x.samples.as_slice(), &[(1, 1), (3, 3), (4, 4), (5, 10)]);
         assert_eq!(x.len(), 18);
 
@@ -762,7 +771,7 @@ mod tests {
             ],
         };
         let before = x.len();
-        x.compact_to(4);
+        x.compact(4);
         assert_eq!(
             &x.samples.as_slice(),
             &[(1, 10), (4, 9), (25, 11), (100, 100)]
