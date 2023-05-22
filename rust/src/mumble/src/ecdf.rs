@@ -16,7 +16,7 @@
 
 use crate::kstest;
 use num_traits::cast::ToPrimitive;
-use num_traits::Num;
+use num_traits::{Float, Num};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::convert::From;
@@ -252,7 +252,7 @@ where
 
     /// Iterates through all points on the ECDF curve.
     /// The returned iterator generates (V, P(v <= V)) tuples.
-    fn point_iter(&self) -> impl Iterator<Item = (V, f64)> + '_ {
+    pub fn point_iter(&self) -> impl Iterator<Item = (V, f64)> + '_ {
         self.samples
             .iter()
             .scan((0, self.len() as f64), |(sum, total), &(v, n)| {
@@ -316,6 +316,110 @@ where
             last = now;
         }
         sum
+    }
+}
+
+impl<V> ECDF<V>
+where
+    V: Float + Debug,
+{
+    // TODO: Use a Result<V,?> for these functions rather than returing NaN.
+
+    pub fn quantile(&self, q: f64) -> V {
+        if q.is_nan() {
+            return V::nan();
+        }
+        if q < 0.0 {
+            return V::neg_infinity();
+        }
+        if q > 1.0 {
+            return V::infinity();
+        }
+        if self.samples.is_empty() {
+            return V::nan();
+        }
+
+        let mut rank = self.len() as f64 * q;
+        let mut lv = self.samples[0].0;
+        let first = self.samples[0].1 as f64;
+        if first > rank {
+            if self.samples.len() < 2 {
+                return V::nan();
+            }
+            // Find the slope between samples 0 and 1, project backwards.
+            let dv = (self.samples[1].0 - lv).to_f64().unwrap();
+            let dc = self.samples[1].1 as f64;
+            let m = dv / dc;
+            return lv + V::from((rank - first) * m).unwrap();
+        }
+        rank -= first;
+        for (v, count) in self.samples.iter().skip(1) {
+            let n = *count as f64;
+            if n > rank {
+                let fraction = V::from(rank / n).unwrap();
+                return lv + (*v - lv) * fraction;
+            }
+            lv = *v;
+            rank -= n;
+        }
+        return lv;
+    }
+
+    pub fn fraction(&self, v: V) -> f64 {
+        if v.is_nan() {
+            return f64::nan();
+        }
+        if self.samples.is_empty() {
+            return f64::nan();
+        }
+
+        let mut rank = 0.0;
+        let mut sum = 0;
+        let mut iter = self.samples.iter();
+        let (mut last_v, last_count) = match iter.next() {
+            Some((v, n)) => {
+                sum = *n;
+                (*v, *n)
+            }
+            _ => return f64::nan(),
+        };
+        if v < last_v {
+            let (next_v, next_count) = match iter.next() {
+                Some((v, n)) => {
+                    sum += *n;
+                    (*v, *n)
+                }
+                _ => return f64::nan(),
+            };
+            // Find the slope between samples 0 and 1, project backwards.
+            let dv = (next_v - last_v).to_f64().unwrap();
+            let m = next_count as f64 / dv;
+            rank = last_count as f64 + (v - last_v).to_f64().unwrap() * m;
+        } else {
+            loop {
+                let (next_v, next_count) = match iter.next() {
+                    Some((v, n)) => {
+                        sum += *n;
+                        (*v, *n)
+                    }
+                    None => {
+                        rank = sum as f64;
+                        break;
+                    }
+                };
+                if v < next_v {
+                    let dv = (next_v - last_v).to_f64().unwrap();
+                    let m = next_count as f64 / dv;
+                    rank = sum as f64 + (v - next_v).to_f64().unwrap() * m;
+                    break;
+                }
+                last_v = next_v;
+            }
+        };
+        for (_, n) in iter {
+            sum += *n;
+        }
+        (rank / sum as f64).clamp(0.0, 1.0)
     }
 }
 
@@ -791,5 +895,46 @@ mod tests {
         let e = ECDF::from(vec![2, 4, 6, 8]);
         assert_eq!(d.area_difference(&e), 0.5);
         assert_eq!(e.area_difference(&d), 0.5);
+    }
+
+    #[test]
+    fn identity_fraction() {
+        let ecdf = ECDF::from(vec![0.5, 1.0]);
+        assert_eq!(ecdf.fraction(-1.0), 0.0);
+        assert_eq!(ecdf.fraction(0.0), 0.0);
+        assert_eq!(ecdf.fraction(0.125), 0.125);
+        assert_eq!(ecdf.fraction(0.5), 0.5);
+        assert_eq!(ecdf.fraction(0.75), 0.75);
+        assert_eq!(ecdf.fraction(1.0), 1.0);
+        assert_eq!(ecdf.fraction(2.0), 1.0);
+    }
+
+    #[test]
+    fn identity_quantile() {
+        let ecdf = ECDF::from(vec![0.5, 1.0]);
+        assert_eq!(ecdf.quantile(0.0), 0.0);
+        assert_eq!(ecdf.quantile(0.125), 0.125);
+        assert_eq!(ecdf.quantile(0.25), 0.25);
+        assert_eq!(ecdf.quantile(0.5), 0.5);
+        assert_eq!(ecdf.quantile(0.75), 0.75);
+        assert_eq!(ecdf.quantile(1.0), 1.0);
+    }
+
+    #[test]
+    fn bad_quantile_inputs() {
+        let empty = ECDF::<f64>::default();
+        assert!(empty.quantile(0.5).is_nan());
+
+        let one = ECDF::from(vec![1.0]);
+        assert!(one.quantile(0.75).is_nan()); // Not enough samples
+
+        let two = ECDF::from(vec![1.0, 2.0]);
+        assert_eq!(two.quantile(0.75), 1.5);
+
+        let ecdf = ECDF::from(vec![1.0, 2.0, 3.0, 4.0]);
+        assert!(ecdf.quantile(f64::nan()).is_nan());
+        assert_eq!(ecdf.quantile(-0.5), f64::neg_infinity());
+        assert_eq!(ecdf.quantile(0.75), 3.0);
+        assert_eq!(ecdf.quantile(2.0), f64::infinity());
     }
 }
