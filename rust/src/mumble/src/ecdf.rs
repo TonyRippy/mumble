@@ -373,8 +373,8 @@ where
             return f64::nan();
         }
 
-        let mut rank = 0.0;
-        let mut sum = 0;
+        let rank;
+        let mut sum;
         let mut iter = self.samples.iter();
         let (mut last_v, last_count) = match iter.next() {
             Some((v, n)) => {
