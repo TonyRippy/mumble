@@ -86,13 +86,14 @@ where
         self.add_n(sample, 1)
     }
 
-    pub fn merge_sorted(&mut self, it: impl Iterator<Item=(V, usize)>)  {
+    pub fn merge_sorted(&mut self, it: impl Iterator<Item = (V, usize)>) {
         let mut i = 0;
         let mut n = self.samples.len();
         for (v, c) in it {
             loop {
                 if i == n {
                     self.samples.push((v, c));
+                    n += 1;
                     break;
                 }
                 match v.partial_cmp(&self.samples[i].0).unwrap() {
@@ -674,13 +675,24 @@ mod tests {
     }
 
     #[test]
-    fn merge() {
+    fn merge_into_empty_ecdf() {
         let mut x: ECDF<i32> = ECDF::default();
         assert_eq!(x.len(), 0);
 
         x.merge_sorted(std::iter::empty());
         assert_eq!(x.len(), 0);
 
+        let mut y: ECDF<i32> = ECDF {
+            samples: vec![(1, 1), (2, 1), (3, 1)],
+        };
+        assert_eq!(y.len(), 3);
+        x.merge_sorted(y.samples.iter().cloned());
+        assert_eq!(x.len(), 3);
+        assert_eq!(&x.samples.as_slice(), &y.samples.as_slice());
+    }
+
+    #[test]
+    fn merge_into_non_empty_ecdf() {
         let mut y: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1)],
         };
@@ -694,15 +706,16 @@ mod tests {
         y.merge_sorted(not_empty.samples.into_iter());
         assert_eq!(&y.samples.as_slice(), &[(0, 1), (1, 1), (2, 1), (3, 1)]);
         assert_eq!(y.len(), 4);
+
         not_empty = ECDF {
-            samples: vec![(4, 1)],
+            samples: vec![(2, 2), (4, 1), (10, 2)],
         };
         y.merge_sorted(not_empty.samples.into_iter());
         assert_eq!(
             &y.samples.as_slice(),
-            &[(0, 1), (1, 1), (2, 1), (3, 1), (4, 1)]
+            &[(0, 1), (1, 1), (2, 3), (3, 1), (4, 1), (10, 2)]
         );
-        assert_eq!(y.len(), 5);
+        assert_eq!(y.len(), 9);
     }
 
     /// Verifies correct behavior when samples are in a straight line.
