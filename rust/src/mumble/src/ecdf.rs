@@ -22,7 +22,6 @@ use std::cmp::Ordering;
 use std::convert::From;
 use std::fmt::Debug;
 use std::iter::FusedIterator;
-use std::slice::Iter;
 
 #[derive(Clone, Debug, Default)]
 pub struct ECDF<V> {
@@ -87,10 +86,10 @@ where
         self.add_n(sample, 1)
     }
 
-    pub fn merge_sorted(&mut self, it: Iter<(V, usize)>) {
+    pub fn merge_sorted(&mut self, it: impl Iterator<Item=(V, usize)>)  {
         let mut i = 0;
         let mut n = self.samples.len();
-        for &(v, c) in it {
+        for (v, c) in it {
             loop {
                 if i == n {
                     self.samples.push((v, c));
@@ -679,27 +678,26 @@ mod tests {
         let mut x: ECDF<i32> = ECDF::default();
         assert_eq!(x.len(), 0);
 
-        let empty: ECDF<i32> = ECDF::default();
-        x.merge_sorted(empty.samples.iter());
+        x.merge_sorted(std::iter::empty());
         assert_eq!(x.len(), 0);
 
         let mut y: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1)],
         };
         assert_eq!(y.len(), 3);
-        y.merge_sorted(empty.samples.iter());
+        y.merge_sorted(std::iter::empty());
         assert_eq!(y.len(), 3);
 
         let mut not_empty = ECDF {
             samples: vec![(0, 1)],
         };
-        y.merge_sorted(not_empty.samples.iter());
+        y.merge_sorted(not_empty.samples.into_iter());
         assert_eq!(&y.samples.as_slice(), &[(0, 1), (1, 1), (2, 1), (3, 1)]);
         assert_eq!(y.len(), 4);
         not_empty = ECDF {
             samples: vec![(4, 1)],
         };
-        y.merge_sorted(not_empty.samples.iter());
+        y.merge_sorted(not_empty.samples.into_iter());
         assert_eq!(
             &y.samples.as_slice(),
             &[(0, 1), (1, 1), (2, 1), (3, 1), (4, 1)]
