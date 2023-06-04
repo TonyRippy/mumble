@@ -717,13 +717,10 @@ where
                 *sum += n;
                 Some((v, *sum as f64 / *total))
             });
-        dbg!(other_counts.clone().collect::<Vec<(V, f64)>>());
 
-        let mut diffs = self_counts.zip(other_counts).map(|((v1, c1), (_, c2))| {
-            let diff = (c1 - c2).abs();
-            dbg!(v1, c1, c2, diff);
-            (v1, diff)
-        });
+        let mut diffs = self_counts
+            .zip(other_counts)
+            .map(|((v1, c1), (_, c2))| (v1, (c1 - c2).abs()));
 
         let mut last = match diffs.next() {
             Some(x) => x,
