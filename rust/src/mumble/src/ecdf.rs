@@ -332,103 +332,10 @@ impl<V> ECDF<V>
 where
     V: Float + Debug,
 {
-    // TODO: Use a Result<V,?> for these functions rather than returing NaN.
-
-    pub fn quantile(&self, q: f64) -> V {
-        if q.is_nan() {
-            return V::nan();
+    pub fn interpolate(&self) -> InterpolatedECDF<V> {
+        InterpolatedECDF {
+            samples: self.samples.iter().map(|&(v, n)| (v, n as f64)).collect(),
         }
-        if q < 0.0 {
-            return V::neg_infinity();
-        }
-        if q > 1.0 {
-            return V::infinity();
-        }
-        if self.samples.is_empty() {
-            return V::nan();
-        }
-
-        let mut rank = self.len() as f64 * q;
-        let mut lv = self.samples[0].0;
-        let first = self.samples[0].1 as f64;
-        if first > rank {
-            if self.samples.len() < 2 {
-                return V::nan();
-            }
-            // Find the slope between samples 0 and 1, project backwards.
-            let dv = (self.samples[1].0 - lv).to_f64().unwrap();
-            let dc = self.samples[1].1 as f64;
-            let m = dv / dc;
-            return lv + V::from((rank - first) * m).unwrap();
-        }
-        rank -= first;
-        for (v, count) in self.samples.iter().skip(1) {
-            let n = *count as f64;
-            if n > rank {
-                let fraction = V::from(rank / n).unwrap();
-                return lv + (*v - lv) * fraction;
-            }
-            lv = *v;
-            rank -= n;
-        }
-        return lv;
-    }
-
-    pub fn fraction(&self, v: V) -> f64 {
-        if v.is_nan() {
-            return f64::nan();
-        }
-        if self.samples.is_empty() {
-            return f64::nan();
-        }
-
-        let rank;
-        let mut sum;
-        let mut iter = self.samples.iter();
-        let (mut last_v, last_count) = match iter.next() {
-            Some((v, n)) => {
-                sum = *n;
-                (*v, *n)
-            }
-            _ => return f64::nan(),
-        };
-        if v < last_v {
-            let (next_v, next_count) = match iter.next() {
-                Some((v, n)) => {
-                    sum += *n;
-                    (*v, *n)
-                }
-                _ => return f64::nan(),
-            };
-            // Find the slope between samples 0 and 1, project backwards.
-            let dv = (next_v - last_v).to_f64().unwrap();
-            let m = next_count as f64 / dv;
-            rank = last_count as f64 + (v - last_v).to_f64().unwrap() * m;
-        } else {
-            loop {
-                let (next_v, next_count) = match iter.next() {
-                    Some((v, n)) => {
-                        sum += *n;
-                        (*v, *n)
-                    }
-                    None => {
-                        rank = sum as f64;
-                        break;
-                    }
-                };
-                if v < next_v {
-                    let dv = (next_v - last_v).to_f64().unwrap();
-                    let m = next_count as f64 / dv;
-                    rank = sum as f64 + (v - next_v).to_f64().unwrap() * m;
-                    break;
-                }
-                last_v = next_v;
-            }
-        };
-        for (_, n) in iter {
-            sum += *n;
-        }
-        (rank / sum as f64).clamp(0.0, 1.0)
     }
 }
 
@@ -573,6 +480,266 @@ where
 {
 }
 
+#[derive(Clone, Debug)]
+pub struct InterpolatedECDF<V>
+where
+    V: Float + Debug,
+{
+    samples: Vec<(V, f64)>,
+}
+
+impl<V> InterpolatedECDF<V>
+where
+    V: Float + Debug,
+{
+    /// The total number of samples used to construct this ECDF.
+    pub fn len(&self) -> f64 {
+        self.samples.iter().map(|x| x.1).sum()
+    }
+
+    // TODO: Use a Result<V,?> for these functions rather than returing NaN.
+
+    pub fn quantile(&self, q: f64) -> V {
+        if q.is_nan() {
+            return V::nan();
+        }
+        if q < 0.0 {
+            return V::neg_infinity();
+        }
+        if q > 1.0 {
+            return V::infinity();
+        }
+        if self.samples.is_empty() {
+            return V::nan();
+        }
+
+        let mut rank = self.len() * q;
+        let mut lv = self.samples[0].0;
+        let first = self.samples[0].1;
+        if first > rank {
+            if self.samples.len() < 2 {
+                return V::nan();
+            }
+            // Find the slope between samples 0 and 1, project backwards.
+            let dv = (self.samples[1].0 - lv).to_f64().unwrap();
+            let dc = self.samples[1].1;
+            let m = dv / dc;
+            return lv + V::from((rank - first) * m).unwrap();
+        }
+        rank -= first;
+        for &(v, count) in self.samples.iter().skip(1) {
+            let n = count;
+            if n > rank {
+                let fraction = V::from(rank / n).unwrap();
+                return lv + (v - lv) * fraction;
+            }
+            lv = v;
+            rank -= n;
+        }
+        return lv;
+    }
+
+    pub fn fraction(&self, v: V) -> f64 {
+        if v.is_nan() {
+            return f64::nan();
+        }
+        if self.samples.is_empty() {
+            return f64::nan();
+        }
+
+        let rank;
+        let mut sum;
+        let mut iter = self.samples.iter();
+        let (mut last_v, last_count) = match iter.next() {
+            Some(&(v, n)) => {
+                sum = n;
+                (v, n)
+            }
+            _ => return f64::nan(),
+        };
+        if v < last_v {
+            let (next_v, next_count) = match iter.next() {
+                Some(&(v, n)) => {
+                    sum += n;
+                    (v, n)
+                }
+                _ => return f64::nan(),
+            };
+            // Find the slope between samples 0 and 1, project backwards.
+            let dv = (next_v - last_v).to_f64().unwrap();
+            let m = next_count as f64 / dv;
+            rank = last_count as f64 + (v - last_v).to_f64().unwrap() * m;
+        } else {
+            loop {
+                let (next_v, next_count) = match iter.next() {
+                    Some(&(v, n)) => {
+                        sum += n;
+                        (v, n)
+                    }
+                    None => {
+                        rank = sum as f64;
+                        break;
+                    }
+                };
+                if v < next_v {
+                    let dv = (next_v - last_v).to_f64().unwrap();
+                    let m = next_count / dv;
+                    rank = sum + (v - next_v).to_f64().unwrap() * m;
+                    break;
+                }
+                last_v = next_v;
+            }
+        };
+        for &(_, n) in iter {
+            sum += n;
+        }
+        (rank / sum).clamp(0.0, 1.0)
+    }
+
+    // TODO: It should be possible to turn this into an iterator using flat_map.
+
+    fn interpolate_counts<I: Iterator<Item = V>>(&self, mut points_iter: I) -> Vec<(V, f64)> {
+        if self.samples.is_empty() {
+            return points_iter.map(|v| (v, 0.0)).collect();
+        }
+        let mut points_item = points_iter.next();
+        if points_item.is_none() {
+            return self.samples.clone();
+        }
+
+        let mut out = Vec::with_capacity(
+            self.samples.len()
+                + match points_iter.size_hint() {
+                    (_, Some(upper)) => upper,
+                    (lower, None) => lower,
+                },
+        );
+        // Establish the starting point for interpolation.
+        let mut samples_iter = self.samples.iter().peekable();
+        let mut lower_v = match (points_item, samples_iter.peek()) {
+            (Some(v), Some(&&(v2, c))) => {
+                if v < v2 {
+                    out.push((v, 0.0));
+                    points_item = points_iter.next();
+                    v
+                } else {
+                    // Copy the first sample
+                    out.push((v2, c));
+                    samples_iter.next();
+                    v2
+                }
+            }
+            _ => {
+                panic!("empty merge");
+            }
+        };
+
+        // Walk the remaining samples, interpolating as needed.
+        let mut points_between = Vec::new();
+        for &sample in samples_iter {
+            let upper_v = sample.0;
+
+            // Find all points between lower_v inclusive and upper_v exclusive.
+            points_between.clear();
+            if let Some(v) = points_item {
+                if v == lower_v {
+                    points_item = points_iter.next();
+                }
+            }
+            while let Some(v) = points_item {
+                if v < sample.0 {
+                    points_between.push(v);
+                    points_item = points_iter.next();
+                } else {
+                    break;
+                }
+            }
+
+            if points_between.is_empty() {
+                // no interpolation needed, just add upper_v!
+                out.push((upper_v, sample.1));
+            } else {
+                let dv = (upper_v - lower_v).to_f64().unwrap();
+                let m = sample.1 / dv;
+                let mut last_count = 0.0;
+                for &v in points_between.iter() {
+                    let new_count = (v - lower_v).to_f64().unwrap() * m;
+                    out.push((v, new_count - last_count));
+                    last_count = new_count;
+                }
+                out.push((upper_v, sample.1 - last_count));
+            }
+            lower_v = upper_v;
+        }
+
+        // Copy any points after the last sample.
+        if let Some(v) = points_item {
+            if v > lower_v {
+                out.push((v, 0.0));
+            }
+            for v in points_iter {
+                out.push((v, 0.0));
+            }
+        }
+        out
+    }
+
+    pub fn merge(&self, other: &InterpolatedECDF<V>) -> InterpolatedECDF<V> {
+        if self.samples.is_empty() {
+            return other.clone();
+        }
+        if other.samples.is_empty() {
+            return self.clone();
+        }
+        let self_counts = self.interpolate_counts(other.samples.iter().map(|&(v, _)| v));
+        let other_counts = other.interpolate_counts(self.samples.iter().map(|&(v, _)| v));
+        InterpolatedECDF {
+            samples: self_counts
+                .iter()
+                .zip(other_counts.iter())
+                .map(|(&(v1, c1), &(_, c2))| (v1, c1 + c2))
+                .collect(),
+        }
+    }
+
+    pub fn area_difference(&self, other: &InterpolatedECDF<V>) -> f64 {
+        let self_counts = self
+            .interpolate_counts(other.samples.iter().map(|&(v, _)| v))
+            .into_iter()
+            .scan((0.0, self.len() as f64), |(sum, total), (v, n)| {
+                *sum += n;
+                Some((v, *sum as f64 / *total))
+            });
+        let other_counts = other
+            .interpolate_counts(self.samples.iter().map(|&(v, _)| v))
+            .into_iter()
+            .scan((0.0, other.len() as f64), |(sum, total), (v, n)| {
+                *sum += n;
+                Some((v, *sum as f64 / *total))
+            });
+        dbg!(other_counts.clone().collect::<Vec<(V, f64)>>());
+
+        let mut diffs = self_counts.zip(other_counts).map(|((v1, c1), (_, c2))| {
+            let diff = (c1 - c2).abs();
+            dbg!(v1, c1, c2, diff);
+            (v1, diff)
+        });
+
+        let mut last = match diffs.next() {
+            Some(x) => x,
+            _ => return 0.0,
+        };
+        let mut sum = 0.0;
+        for next in diffs {
+            let w = (next.0 - last.0).to_f64().unwrap();
+            let area = 0.5 * w * (next.1 + last.1);
+            sum += area;
+            last = next;
+        }
+        sum
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -682,7 +849,7 @@ mod tests {
         x.merge_sorted(std::iter::empty());
         assert_eq!(x.len(), 0);
 
-        let mut y: ECDF<i32> = ECDF {
+        let y: ECDF<i32> = ECDF {
             samples: vec![(1, 1), (2, 1), (3, 1)],
         };
         assert_eq!(y.len(), 3);
@@ -919,7 +1086,7 @@ mod tests {
 
     #[test]
     fn identity_fraction() {
-        let ecdf = ECDF::from(vec![0.5, 1.0]);
+        let ecdf = ECDF::from(vec![0.5, 1.0]).interpolate();
         assert_eq!(ecdf.fraction(-1.0), 0.0);
         assert_eq!(ecdf.fraction(0.0), 0.0);
         assert_eq!(ecdf.fraction(0.125), 0.125);
@@ -931,7 +1098,7 @@ mod tests {
 
     #[test]
     fn identity_quantile() {
-        let ecdf = ECDF::from(vec![0.5, 1.0]);
+        let ecdf = ECDF::from(vec![0.5, 1.0]).interpolate();
         assert_eq!(ecdf.quantile(0.0), 0.0);
         assert_eq!(ecdf.quantile(0.125), 0.125);
         assert_eq!(ecdf.quantile(0.25), 0.25);
@@ -942,19 +1109,60 @@ mod tests {
 
     #[test]
     fn bad_quantile_inputs() {
-        let empty = ECDF::<f64>::default();
+        let empty = ECDF::<f64>::default().interpolate();
         assert!(empty.quantile(0.5).is_nan());
 
-        let one = ECDF::from(vec![1.0]);
+        let one = ECDF::from(vec![1.0]).interpolate();
         assert!(one.quantile(0.75).is_nan()); // Not enough samples
 
-        let two = ECDF::from(vec![1.0, 2.0]);
+        let two = ECDF::from(vec![1.0, 2.0]).interpolate();
         assert_eq!(two.quantile(0.75), 1.5);
 
-        let ecdf = ECDF::from(vec![1.0, 2.0, 3.0, 4.0]);
+        let ecdf = ECDF::from(vec![1.0, 2.0, 3.0, 4.0]).interpolate();
         assert!(ecdf.quantile(f64::nan()).is_nan());
         assert_eq!(ecdf.quantile(-0.5), f64::neg_infinity());
         assert_eq!(ecdf.quantile(0.75), 3.0);
         assert_eq!(ecdf.quantile(2.0), f64::infinity());
+    }
+
+    #[test]
+    fn merge_interpolated() {
+        let a = ECDF::from(vec![0.0, 1.0, 2.0, 3.0, 4.0]).interpolate();
+        let b = ECDF::from(vec![8.0, 8.0, 9.0]).interpolate();
+        let c = a.merge(&b);
+        assert_eq!(a.len() + b.len(), c.len());
+        assert_eq!(
+            c.samples.as_slice(),
+            &[
+                (0.0, 1.0),
+                (1.0, 1.25),
+                (2.0, 1.25),
+                (3.0, 1.25),
+                (4.0, 1.25),
+                (8.0, 1.0),
+                (9.0, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn interpolated_area() {
+        let a = ECDF::from(vec![1.0, 2.0]).interpolate();
+        let b = ECDF::from(vec![0.5, 1.0, 2.0, 3.0]).interpolate();
+        assert_eq!(a.area_difference(&a), 0.0);
+        assert_eq!(b.area_difference(&b), 0.0);
+
+        // a    = (0.5, 0.00) (1.0, 0.5) (2.0, 1.00) (3.0, 1.0)
+        // b    = (0.5, 0.25) (1.0, 0.5) (2.0, 0.75) (3.0, 1.0)
+        // ----------------------------------------------------
+        // diff = (0.5, 0.25) (1.0, 0.0) (2.0, 0.25) (3.0, 0.0)
+        //
+        // This makes two triangles:
+        //   0.5..1.0 : w = 0.5, h = 0.25, area = 0.0625
+        //   1.0..2.0 : w = 1.0, h = 0.25, area = 0.1250
+        //   2.0..3.0 : w = 1.0, h = 0.25, area = 0.1250
+        //                                 -------------
+        //                                        0.3125
+        assert_eq!(a.area_difference(&b), 0.3125);
     }
 }
