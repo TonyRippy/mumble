@@ -480,7 +480,7 @@ where
 {
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InterpolatedECDF<V>
 where
     V: Float + Debug,
@@ -734,6 +734,32 @@ where
             last = next;
         }
         sum
+    }
+}
+
+impl<V> Serialize for InterpolatedECDF<V>
+where
+    V: Float + Debug + Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.samples.serialize(serializer)
+    }
+}
+
+impl<'de, V> Deserialize<'de> for InterpolatedECDF<V>
+where
+    V: Float + Debug + Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(InterpolatedECDF::<V> {
+            samples: Vec::deserialize::<D>(deserializer)?,
+        })
     }
 }
 
