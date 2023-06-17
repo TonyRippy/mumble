@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS [cluster_group] (
 CREATE TABLE IF NOT EXISTS [cluster] (
    id INTEGER PRIMARY KEY AUTOINCREMENT,
    group_id INTEGER NOT NULL,
-   centroid BLOB NOT NULL,
+   centroid BLOB NOT NULL,  -- ECDF serialized using MessagePack
 
    FOREIGN KEY (group_id) REFERENCES [cluster_group] (id)
 );

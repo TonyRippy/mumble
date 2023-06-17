@@ -16,5 +16,5 @@
 
 CREATE TABLE IF NOT EXISTS [full_sample] (
    timestamp DATETIME PRIMARY KEY NOT NULL,
-   data BLOB NOT NULL
+   data BLOB NOT NULL  -- ECDF serialized using MessagePack
 );

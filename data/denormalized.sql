@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS [label_set] (
 CREATE TABLE IF NOT EXISTS [monitoring_data] (
    timestamp DATETIME NOT NULL,
    label_set_id INTEGER NOT NULL,
-   data BLOB NOT NULL,
+   data BLOB NOT NULL,  -- Prometheus Histogram as a serialized protobuf.
 
    PRIMARY KEY (timestamp, label_set_id),
 

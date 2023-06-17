@@ -27,3 +27,4 @@ The following tools were created to assist in preparing experiment data:
 
 Other tools I used:
 - [`csvq`](https://mithrandie.github.io/csvq/) - A tool for querying CSV files using SQL.
+- [`sqlite3`](https://www.sqlite.org/) - A simple, file-based SQL database.
