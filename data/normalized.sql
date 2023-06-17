@@ -3,8 +3,6 @@ CREATE TABLE [label_set] (
    labels TEXT NOT NULL
 );
 
-INSERT INTO [label_set] (labels) VALUES ('{}');
-
 CREATE TABLE [cluster_group] (
    id INTEGER PRIMARY KEY AUTOINCREMENT,
    config TEXT NOT NULL
@@ -21,12 +19,12 @@ CREATE TABLE [cluster] (
 );
 
 CREATE TABLE [monitoring_data] (
-   time TIMESTAMP NOT NULL,
+   timestamp DATETIME NOT NULL,
    label_set_id INTEGER NOT NULL,
    cluster_id INTEGER NOT NULL,
    count INTEGER NOT NULL,
 
-   PRIMARY KEY (time, label_set_id),
+   PRIMARY KEY (timestamp, label_set_id),
 
    FOREIGN KEY (label_set_id) REFERENCES [label_set] (id),
    FOREIGN KEY (cluster_id) REFERENCES [cluster] (id)
