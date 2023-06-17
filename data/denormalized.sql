@@ -3,8 +3,6 @@ CREATE TABLE [label_set] (
    labels TEXT NOT NULL
 );
 
-INSERT INTO [label_set] (labels) VALUES ('{}');
-
 CREATE TABLE [monitoring_data] (
    timestamp DATETIME NOT NULL,
    label_set_id INTEGER NOT NULL,
