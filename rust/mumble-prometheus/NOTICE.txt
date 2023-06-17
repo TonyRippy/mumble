@@ -1,0 +1,8 @@
+This project includes software developed as part of Prometheus.
+(https://github.com/prometheus/)
+
+ - The code to generate histogram bounds is from:
+   https://github.com/prometheus/prometheus/tree/main/model/histogram
+
+ - The protocol buffer definitions come from:
+   https://github.com/prometheus/client_model/tree/master/io/prometheus/client
