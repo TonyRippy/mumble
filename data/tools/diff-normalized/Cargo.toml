@@ -9,6 +9,6 @@ edition = "2021"
 clap = { version = "4", features = ["derive"] }
 env_logger = "0.10"
 log = "0.4"
-mumble = { path = "../../../rust/src/mumble" }
+mumble = { path = "../../../rust/mumble" }
 rmp-serde = "1.1.1"
 sqlite = "0.30"
