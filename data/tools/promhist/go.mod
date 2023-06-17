@@ -1,4 +1,4 @@
-module github.com/TonyRippy/mumble/data/promhist
+module github.com/TonyRippy/mumble/data/tools/promhist
 
 go 1.19
 
