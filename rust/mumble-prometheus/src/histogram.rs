@@ -63,12 +63,12 @@ pub fn get_bound(idx: i32, schema: i32) -> f64 {
         // observations). Return math.MaxFloat64 as explained above.
         return f64::MAX;
     }
-    return ldexp(frac, exp);
+    ldexp(frac, exp)
 }
 
 /// EXPONENTIAL_BOUNDS is a precalculated table of bucket bounds in the interval
 /// [0.5,1) in schema 0 to 8.
-pub const EXPONENTIAL_BOUNDS: &'static [&'static [f64]] = &[
+pub const EXPONENTIAL_BOUNDS: &[&[f64]] = &[
     // Schema "0":
     &[0.5],
     // Schema 1:

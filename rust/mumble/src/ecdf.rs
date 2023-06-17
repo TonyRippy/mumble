@@ -536,7 +536,7 @@ where
             lv = v;
             rank -= n;
         }
-        return lv;
+        lv
     }
 
     pub fn fraction(&self, v: V) -> f64 {
@@ -567,8 +567,8 @@ where
             };
             // Find the slope between samples 0 and 1, project backwards.
             let dv = (next_v - last_v).to_f64().unwrap();
-            let m = next_count as f64 / dv;
-            rank = last_count as f64 + (v - last_v).to_f64().unwrap() * m;
+            let m = next_count / dv;
+            rank = last_count + (v - last_v).to_f64().unwrap() * m;
         } else {
             loop {
                 let (next_v, next_count) = match iter.next() {
@@ -577,7 +577,7 @@ where
                         (v, n)
                     }
                     None => {
-                        rank = sum as f64;
+                        rank = sum;
                         break;
                     }
                 };
@@ -706,16 +706,16 @@ where
         let self_counts = self
             .interpolate_counts(other.samples.iter().map(|&(v, _)| v))
             .into_iter()
-            .scan((0.0, self.len() as f64), |(sum, total), (v, n)| {
+            .scan((0.0, self.len()), |(sum, total), (v, n)| {
                 *sum += n;
-                Some((v, *sum as f64 / *total))
+                Some((v, *sum / *total))
             });
         let other_counts = other
             .interpolate_counts(self.samples.iter().map(|&(v, _)| v))
             .into_iter()
-            .scan((0.0, other.len() as f64), |(sum, total), (v, n)| {
+            .scan((0.0, other.len()), |(sum, total), (v, n)| {
                 *sum += n;
-                Some((v, *sum as f64 / *total))
+                Some((v, *sum / *total))
             });
 
         let mut diffs = self_counts

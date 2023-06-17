@@ -3,4 +3,5 @@ members = [
     "cpumon",
     "ecdfs2dot",
     "mumble",
+    "mumble-prometheus",
 ]
