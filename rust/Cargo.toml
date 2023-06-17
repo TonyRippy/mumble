@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "collector",
     "cpumon",
     "ecdfs2dot",
     "mumble",
