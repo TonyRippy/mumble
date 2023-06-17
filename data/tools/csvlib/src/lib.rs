@@ -68,8 +68,8 @@ pub fn read_values<R: Read>(reader: R) -> Vec<Value> {
         .from_reader(reader)
         .deserialize::<Value>()
         .filter_map(|r| {
-            if r.is_ok() {
-                Some(r.unwrap())
+            if let Ok(v) = r {
+                Some(v)
             } else {
                 warn!("{:?}", r.unwrap_err());
                 None
@@ -79,7 +79,7 @@ pub fn read_values<R: Read>(reader: R) -> Vec<Value> {
 }
 
 /// Writes time series samples to a CSV file.
-pub fn write_values<'a, W, I, V>(writer: W, values: I) -> Result<(), Error>
+pub fn write_values<W, I, V>(writer: W, values: I) -> Result<(), Error>
 where
     W: Write,
     V: AsRef<Value>,
@@ -96,7 +96,7 @@ where
 }
 
 /// Writes points from an ECDF to a CSV file.
-pub fn write_fractions<'a, W, I, V>(writer: W, fractions: I) -> Result<(), Error>
+pub fn write_fractions<W, I, V>(writer: W, fractions: I) -> Result<(), Error>
 where
     W: Write,
     V: AsRef<Fraction>,

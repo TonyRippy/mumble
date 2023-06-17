@@ -74,8 +74,8 @@ impl MinMeanMax {
                 continue;
             }
             let diff = mean - x;
-            sum = sum + diff * diff;
-            count = count + 1;
+            sum += diff * diff;
+            count += 1;
         }
         if count == 0 {
             return 0.0;
@@ -94,8 +94,8 @@ impl MinMeanMax {
                 continue;
             }
             let diff = x - mean;
-            sum = sum + diff * diff;
-            count = count + 1;
+            sum += diff * diff;
+            count += 1;
         }
         if count == 0 {
             return 0.0;

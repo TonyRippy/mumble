@@ -40,7 +40,7 @@ struct Cli {
 impl Cli {
     fn create_file(&self, timestamp: u64) -> Result<File, Error> {
         let path = format!("{}/{}.csv", self.output_path, timestamp);
-        File::create(&path)
+        File::create(path)
     }
 }
 
