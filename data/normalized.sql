@@ -1,16 +1,14 @@
-CREATE TABLE [label_set] (
+CREATE TABLE IF NOT EXISTS [label_set] (
    id INTEGER PRIMARY KEY AUTOINCREMENT,
    labels TEXT NOT NULL
 );
 
-CREATE TABLE [cluster_group] (
+CREATE TABLE IF NOT EXISTS [cluster_group] (
    id INTEGER PRIMARY KEY AUTOINCREMENT,
    config TEXT NOT NULL
 );
 
-INSERT INTO [cluster_group] (config) VALUES ('{}');
-
-CREATE TABLE [cluster] (
+CREATE TABLE IF NOT EXISTS [cluster] (
    id INTEGER PRIMARY KEY AUTOINCREMENT,
    group_id INTEGER NOT NULL,
    centroid BLOB NOT NULL,
@@ -18,7 +16,7 @@ CREATE TABLE [cluster] (
    FOREIGN KEY (group_id) REFERENCES [cluster_group] (id)
 );
 
-CREATE TABLE [monitoring_data] (
+CREATE TABLE IF NOT EXISTS [monitoring_data] (
    timestamp DATETIME NOT NULL,
    label_set_id INTEGER NOT NULL,
    cluster_id INTEGER NOT NULL,

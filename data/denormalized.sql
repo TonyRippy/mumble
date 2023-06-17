@@ -1,9 +1,9 @@
-CREATE TABLE [label_set] (
+CREATE TABLE IF NOT EXISTS [label_set] (
    id INTEGER PRIMARY KEY AUTOINCREMENT,
    labels TEXT NOT NULL
 );
 
-CREATE TABLE [monitoring_data] (
+CREATE TABLE IF NOT EXISTS [monitoring_data] (
    timestamp DATETIME NOT NULL,
    label_set_id INTEGER NOT NULL,
    data BLOB NOT NULL,
