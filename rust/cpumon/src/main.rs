@@ -217,7 +217,9 @@ async fn monitoring_loop(port: u16) -> Result<(), Error> {
                 break
             }
             _ = sample_interval.tick() => {
-                metrics.sample();
+                if let Err(e) = metrics.sample() {
+                    error!("unable to sample metrics: {}", e);
+                }
             }
             _ = push_interval.tick() => {
                 metrics.push();
