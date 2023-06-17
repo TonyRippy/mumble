@@ -43,7 +43,7 @@ You may also inspect the output of [/proc/cpuinfo](cpuinfo.txt).
 
 ## Using This Data
 
-If you would like to use this data for your own project. Please go
+If you would like to use this data for your own project, please go
 ahead! This data is released under the Apache 2.0 License, same as the
 rest of the code in this project. This allows you to use the data 
 for any purpose, to distribute it, modify it, and to distribute
@@ -56,7 +56,7 @@ I only ask that if it is useful to you, let me know!
 If you would like to cite this dataset, I recommend the following:
 
 > Rippy, Tony, 2023, CPU Utilization of Laptop Computer
-> https://github.com/TonyRippy/mumble/data/cpu.csv.gz, V1
+> <br>https://github.com/TonyRippy/mumble/data/cpu.csv.gz, V1
 
 This citation is based on the following recommendations:
-https://dataverse.org/best-practices/data-citation
+<br>https://dataverse.org/best-practices/data-citation
