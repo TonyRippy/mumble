@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "src/cpumon",
-    "src/ecdfs2dot",
-    "src/mumble",
+    "cpumon",
+    "ecdfs2dot",
+    "mumble",
 ]
