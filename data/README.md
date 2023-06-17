@@ -21,8 +21,9 @@ The following data was available online in the public domain:
 ## Tools
 
 The following tools were created to assist in preparing experiment data:
-- `promhist` - A utility that uses the Prometheus Go client library to generate native histograms from CSV data and write them as serialize protobufs to a local sqlite3 database.
+- `full-sample` - Reads a time series from a CSV file, combines it into a full-resolution ECDF, and stores it into a SQLite3 database. This is later used to measure the fidelity of histograms and other aggregations to the underlying data set.
 - `partition-input` - Takes one big CSV file and breaks it up into one CSV file per time interval.
+- `promhist` - A utility that uses the Prometheus Go client library to generate native histograms from CSV data and write them as serialize protobufs to a local sqlite3 database.
 
 Other tools I used:
 - [`csvq`](https://mithrandie.github.io/csvq/) - A tool for querying CSV files using SQL.
