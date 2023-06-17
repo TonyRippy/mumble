@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "csvlib",
+    "diff-normalized",
+    "full-sample",
+    "partition-input",
+    # "promhist", (this is a Go application)
+]
