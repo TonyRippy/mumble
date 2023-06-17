@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "csvlib",
+    "diff-denormalized",
     "diff-normalized",
     "full-sample",
     "partition-input",

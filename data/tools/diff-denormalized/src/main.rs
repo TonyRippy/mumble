@@ -1,4 +1,4 @@
-// Calculates statistics about the accuracy of cluster centroids
+// Calculates statistics about the accuracy of histograms
 // as compared to the underlying data.
 //
 // Copyright (C) 2023, Tony Rippy
@@ -18,7 +18,8 @@
 
 use clap::Parser;
 use env_logger::Env;
-use mumble::ecdf::{InterpolatedECDF, ECDF};
+use mumble::ecdf::ECDF;
+use mumble_prometheus::{histogram_to_ecdf, parse_histogram};
 
 use std::fmt::{self, Display};
 
@@ -137,25 +138,14 @@ fn main() {
     let mut err = MinMeanMax::new();
 
     // Open the input database
-    let connection = sqlite::open(args.input_database).expect("open database");
+    let connection = sqlite::open(/*&args.*/ args.input_database).expect("open output database");
 
-    // Count the number of known clusters.
-    let count = connection
-        .prepare("SELECT COUNT(*) FROM cluster;")
-        .expect("prepare count query")
-        .iter()
-        .map(|row| row.expect("read input row").read::<i64, _>(0))
-        .next()
-        .expect("read count");
-    println!("cluster count: {count}");
-
-    // Iterate over all samples, calculating the area difference with the centroid it is mapped to.
+    // Iterate over all samples, calculating the area difference with the histogram.
     for row in connection
         .prepare(
-            "SELECT md.timestamp, f.data, c.centroid
-            FROM monitoring_data md 
-            INNER JOIN full_sample f ON f.timestamp = md.timestamp
-            INNER JOIN cluster c ON c.id = md.cluster_id;",
+            "SELECT md.timestamp, f.data, md.data
+            FROM monitoring_data md
+            INNER JOIN full_sample f ON f.timestamp = md.timestamp;",
         )
         .expect("prepare input query")
         .iter()
@@ -164,9 +154,9 @@ fn main() {
         // let timestamp = row.read::<&str, _>(0);
         let full: ECDF<f64> =
             rmp_serde::from_slice(row.read::<&[u8], _>(1)).expect("deserialize full sample");
-        let centroid: InterpolatedECDF<f64> =
-            rmp_serde::from_slice(row.read::<&[u8], _>(2)).expect("deserialize centroid");
-        err.update(full.interpolate().area_difference(&centroid));
+        let h = parse_histogram(row.read::<&[u8], _>(2)).expect("parse histogram");
+        let other = histogram_to_ecdf(&h);
+        err.update(full.interpolate().area_difference(&other));
     }
-    println!("error: {}", &err);
+    println!("{}", &err);
 }
