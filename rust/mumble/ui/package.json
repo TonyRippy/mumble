@@ -25,6 +25,6 @@
     "webpack-dev-server": "^4.11.1"
   },
   "dependencies": {
-    "ecdfs": "file:../../../../ts/ecdfs"
+    "ecdfs": "file:../../../ts/ecdfs"
   }
 }
