@@ -703,6 +703,7 @@ where
     }
 
     pub fn area_difference(&self, other: &InterpolatedECDF<V>) -> f64 {
+        // Iterate over both ECDFs, iterating betwen points as necessary.
         let self_counts = self
             .interpolate_counts(other.samples.iter().map(|&(v, _)| v))
             .into_iter()
@@ -718,18 +719,66 @@ where
                 Some((v, *sum / *total))
             });
 
-        let mut diffs = self_counts
-            .zip(other_counts)
-            .map(|((v1, c1), (_, c2))| (v1, (c1 - c2).abs()));
+        // Zip the two iterators together. All points should have the same X values.
+        let mut join = self_counts.zip(other_counts).map(|((v1, c1), (v2, c2))| {
+            debug_assert_eq!(v1, v2);
+            (v1, c1, c2)
+        });
 
-        let mut last = match diffs.next() {
+        // Calulate the area difference between each point and the next.
+        let mut last = match join.next() {
             Some(x) => x,
             _ => return 0.0,
         };
         let mut sum = 0.0;
-        for next in diffs {
-            let w = (next.0 - last.0).to_f64().unwrap();
-            let area = 0.5 * w * (next.1 + last.1);
+        for next in join {
+            // Gather the points into two lines that share X coordinates:
+            //   Line "A" = (x1, y1_a) -> (x2, y2_a)
+            //   Line "B" = (x1, y1_b) -> (x2, y2_b)
+            let (x1, mut y1_a, mut y1_b) = last;
+            let (x2, mut y2_a, mut y2_b) = next;
+            // Swap the two lines so that line "A" always starts above line "B".
+            if y1_b > y1_a {
+                std::mem::swap(&mut y1_a, &mut y1_b);
+                std::mem::swap(&mut y2_a, &mut y2_b);
+            }
+            // Check whether line "A" also *finishes* above line "B".
+            let area = if y2_b > y2_a {
+                // When this happens it means the lines cross somewhere in the middle.
+                // This results in a "bow-tie" shape; two triangles touching point-to-point.
+                // The area formula for this is more complex.
+                let x1 = x1.to_f64().unwrap();
+                let x2 = x2.to_f64().unwrap();
+                debug_assert!(x2 > x1);
+                let dx = x2 - x1;
+
+                let m_a = (y2_a - y1_a) / dx;
+                debug_assert!(m_a >= 0.0);
+                let m_b = (y2_b - y1_b) / dx;
+                debug_assert!(m_a >= 0.0);
+
+                let b_a = y1_a - m_a * x1;
+                debug_assert!((y2_a - (m_a * x2 + b_a)).abs() < 1e-10);
+                let b_b = y1_b - m_b * x1;
+                debug_assert!((y2_b - (m_b * x2 + b_b)).abs() < 1e-10);
+
+                let x_intersect = (b_b - b_a) / (m_a - m_b);
+                debug_assert!(x_intersect >= x1); // x_intersect == x1 when y1_a == y1_b.
+                debug_assert!(x_intersect < x2);
+
+                let h1 = y1_a - y1_b;
+                debug_assert!(h1 >= 0.0);
+                let h2 = y2_b - y2_a;
+                debug_assert!(h2 > 0.0);
+
+                0.5 * ((x_intersect - x1) * h1 + (x2 - x_intersect) * h2)
+            } else {
+                // The area between the lines is a trapazoid.
+                let dx = (x2 - x1).to_f64().unwrap();
+                let dy1 = y1_a - y1_b;
+                let dy2 = y2_a - y2_b;
+                0.5 * dx * (dy1 + dy2)
+            };
             sum += area;
             last = next;
         }
@@ -1187,5 +1236,31 @@ mod tests {
         //                                 -------------
         //                                        0.3125
         assert_eq!(a.area_difference(&b), 0.3125);
+    }
+
+    #[test]
+    fn area_of_crossing_lines() {
+        // Creates two interpolated ECDFs that cross over each other more than
+        // once. Each parallelogram will have a height of 1/3, and a width of 3.
+        //                     A __________
+        //                      /     /
+        //             B ______/_____/ B
+        //              /     /
+        //     A ______/_____/ A
+        //      /     /
+        // ____/_____/ B
+        //
+        // X:  0 1 2 3 4 5 6 7 8 9 0 1 2 3
+        let a = InterpolatedECDF {
+            samples: vec![(0.0, 0.0), (1.0, 1.0), (7.0, 0.0), (9.0, 2.0)],
+        };
+        let b = InterpolatedECDF {
+            samples: vec![(3.0, 0.0), (5.0, 2.0), (11.0, 0.0), (12.0, 1.0)],
+        };
+        // let points = &[0.0, 1.0, 3.0, 4.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0];
+        // println!("A = {:?}", a.interpolate_counts(points.iter().cloned()));
+        // println!("B = {:?}", b.interpolate_counts(points.iter().cloned()));
+        assert!((a.area_difference(&b) - 3.0).abs() < 1e-10);
+        assert!((b.area_difference(&a) - 3.0).abs() < 1e-10);
     }
 }
