@@ -55,7 +55,6 @@ export interface Plot {
   segments: SegmentList
   minX: number
   maxX: number
-  maxY: number
 }
 
 /*
@@ -76,23 +75,14 @@ interface RGBA {
   a: number
 }
 
-/*
-
-segments --> func
-
-func --> render to y array
-
-Layer = (func, line color, fill color) -> image
-
-[
-
-]
-*/
-
-type RenderFunc = (w: number, cx2fx: Func, fy2cy: Func) => number[]
+// A function that, given an image mapping, generates min, max, and array of y values.
+type RenderFunc = (w: number, cx2fx: Func) => [number, number, number[]]
 
 export function getRenderFuncForPlot (p: Plot): RenderFunc {
-  return function (w: number, cx2fx: Func, fy2cy: Func): number[] {
+  return function (w: number, cx2fx: Func): [number, number, number[]] {
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
     // For each X in the image, find the Y value.
     const ys = new Array<number>(w)
     let s = p.segments
@@ -105,22 +95,29 @@ export function getRenderFuncForPlot (p: Plot): RenderFunc {
       }
       // Calculate the value of y in function space.
       const fy = s.f.eval(fx)
-      ys[cx] = fy2cy.eval(fy)
+      if (fy < minY) minY = fy
+      if (fy > maxY) maxY = fy
+      ys[cx] = fy
     }
-    return ys
+    return [minY, maxY, ys]
   }
 }
 
 export function getRenderFuncForFunction (f: (number) => number): RenderFunc {
-  return function (w: number, cx2fx: Func, fy2cy: Func): number[] {
+  return function (w: number, cx2fx: Func): [number, number, number[]] {
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    // For each X in the image, find the Y value.
     const ys = new Array<number>(w)
     for (let cx = 0; cx < w; cx++) {
       const fx = cx2fx.eval(cx)
       const fy = f(fx)
-      const cy = fy2cy.eval(fy)
-      ys[cx] = cy
+      if (fy < minY) minY = fy
+      if (fy > maxY) maxY = fy
+      ys[cx] = fy
     }
-    return ys
+    return [minY, maxY, ys]
   }
 }
 
@@ -129,18 +126,25 @@ export class Layer {
   public image: ImageData | null
 
   constructor (private readonly f: RenderFunc, private readonly lineColor: RGBA, private readonly fillColor: RGBA) {
+    this.ys = []
+  }
+
+  public scan (w: number, cx2fx: Func): [number, number] {
+    // For each X in the image, find the Y value.
+    let [min, max, ys] = this.f(w, cx2fx)
+    this.ys = ys
+    return [min, max]
   }
 
   public render (w: number, h: number, cx2fx: Func, fy2cy: Func): ImageData {
-    // For each X in the image, find the Y value.
-    this.ys = this.f(w, cx2fx, fy2cy)
-
+    // Convert y values to coordinate space
+    const ys = this.ys.map(fy => fy2cy.eval(fy))
     // Render the fill
     const pixels = new Uint8ClampedArray(w * h * 4)
     for (let cy = 0; cy < h; cy++) {
       let i = cy * w * 4
       for (let cx = 0; cx < w; cx++) {
-        if (this.ys[cx] <= cy) {
+        if (ys[cx] <= cy) {
           // color under the graph
           pixels[i] = this.fillColor.r
           i++
@@ -164,18 +168,26 @@ export class Layer {
       }
     }
     // Draw the curve itself.
-    let lastY = Math.floor(this.ys[0])
+    let lastY = Math.floor(ys[0])
+    const limY = h - 1
     for (let cx = 0; cx < w; cx++) {
-      let cy = Math.floor(this.ys[cx])
-      let maxY = lastY
-      lastY = cy
-      if (cy > maxY) {
-        const tmp = maxY
-        maxY = cy
-        cy = tmp
+      // For each x value, find the y values that should be colored in.
+      let cy2 = Math.floor(ys[cx])
+      let cy1 = lastY
+      lastY = cy2
+      if (cy1 > cy2) {
+        const tmp = cy2
+        cy2 = cy1
+        cy1 = tmp
       }
-      for (; cy <= maxY; cy++) {
-        let i = (cy * w + cx) * 4
+      // Make sure the lines are within the bounds of the image
+      if (cy2 < 0) continue
+      if (cy1 < 0) cy1 = 0
+      if (cy1 > limY) continue
+      if (cy2 > limY) cy2 = limY
+      // Color in the pixels
+      for (; cy1 <= cy2; cy1++) {
+        let i = (cy1 * w + cx) * 4
         pixels[i] = this.lineColor.r
         i++
         pixels[i] = this.lineColor.g
@@ -196,7 +208,9 @@ export class CDFGraph {
   private cy2fy: Func
   private minX: number
   private maxX: number
-  public layers: Layer[]
+  private minY: number
+  private maxY: number
+  private layers: Layer[]
 
   constructor (private readonly canvas: HTMLCanvasElement) {
     this.layers = []
@@ -206,80 +220,39 @@ export class CDFGraph {
   public setRangeX (min: number, max: number): void {
     this.minX = min
     this.maxX = max
+    this.minY = 0
     this.onResize()
   }
 
+  public setLayer (i: number, layer: Layer): void {
+    this.layers[i] = layer
+    layer.image = null
+    this.onResize()
+  }
+  
   public onResize (e?: Event): void {
     const w = this.canvas.width
     this.cx2fx = linearFunction(0, this.minX, w, this.maxX)
     this.fx2cx = linearFunction(this.minX, 0, this.maxX, w)
 
-    const minY = 0
-    const maxY = 1.1
-    const h = this.canvas.height
-    this.fy2cy = linearFunction(minY, h - 1, maxY, 0)
-    this.cy2fy = linearFunction(h - 1, minY, 0, maxY)
-
-    // reset all the images
-    for (const layer of this.layers) {
-      layer.image = null
+    // reset all the layers
+    if (this.layers.length == 0) {
+      this.maxY = 1
+    } else {
+      for (const layer of this.layers) {
+        layer.image = null
+        let [minY, maxY] = layer.scan(w, this.cx2fx)
+        maxY *= 1.05
+        if (maxY > this.maxY) this.maxY = maxY
+      }
     }
+    const h = this.canvas.height
+    this.fy2cy = linearFunction(this.minY, h - 1, this.maxY, 0)
+    this.cy2fy = linearFunction(h - 1, this.minY, 0, this.maxY)
 
     // force a redraw
     this.draw()
   }
-
-  // This is a hack
-  /*
-  public drawDiscontinuous(p: Plot) {
-    let w = this.canvas.width;
-    let h = this.canvas.height;
-    let ctx = this.canvas.getContext('2d');
-    ctx.clearRect(0, 0, w, h);
-    this.ys = null;
-
-    let deltas = new Array<Point>(sample.n);
-    let maxDelta = 0;
-    let y = 0;
-    let i = 0;
-    for (let i = 0, s = p.segments.next; s != null; s = s.next, i++) {
-      let yy = s.f.eval(s.x);
-      let delta = yy - y;
-      if (delta > maxDelta) {
-        maxDelta = delta;
-      }
-      deltas[i] = {
-        x: s.x,
-        y: delta
-      };
-      y = yy;
-    }
-    maxDelta *= 1.1;  // y margin
-    let xMargin = (p.maxX - p.minX) * 0.1;
-
-    // Create functions to map canvas coodrinates to function space.
-    this.cx2fx = linearFunction(0, p.minX - xMargin, w, p.maxX + xMargin);
-    let fx2cx = linearFunction(p.minX - xMargin, 0, p.maxX + xMargin, w);
-    this.fy2cy = linearFunction(0, h - 1, maxDelta, 0);
-    this.cy2fy = linearFunction(h - 1, 0, 0, maxDelta);
-
-    // Draw the spikes
-    ctx.strokeStyle = 'blue';
-    ctx.beginPath();
-    ctx.moveTo(0, h-1);
-    ctx.lineTo(w, h-1);
-    ctx.stroke();
-    for (let i = 0; i < sample.n; i++) {
-      let p = deltas[i];
-      let x = fx2cx.eval(p.x);
-      let y = this.fy2cy.eval(p.y);
-      ctx.beginPath();
-      ctx.moveTo(x, h-1);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-  }
-  */
 
   public draw (): void {
     const w = this.canvas.width

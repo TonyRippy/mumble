@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import type { CDF } from './cdf'
-import { ConstFunc, linearFunction, cubicFunction, FritschCarlsonTangents } from './func'
+import { ConstFunc, linearFunction, cubicFunction, PolyFunc, FritschCarlsonTangents } from './func'
 import { type Plot, startSegment, findFrontTail, findBackTail } from './plot'
 
 export class ECDF implements CDF {
@@ -196,8 +196,7 @@ export class ECDF implements CDF {
     return {
       segments: root,
       minX: minx,
-      maxX: maxx,
-      maxY: 1
+      maxX: maxx
     }
   }
 
@@ -207,22 +206,48 @@ export class ECDF implements CDF {
       return {
         segments: root,
         minX: 0,
-        maxX: 1,
-        maxY: 1
+        maxX: 1
       }
     }
     let s = root
+
+    // Find the total number of samples.
     let n = 0
     for (let i = 0; i < this.n; i++) {
       n += this.h[i]
     }
-    let lx = this.x[0] - 2
-    let ly = 0
-    let h = 0
-    for (let i = 0; i < this.n; i++) {
+
+    // Project the slope of the first segment backwards to find where it meets zero.
+    // This segment will go from (x=?,y=0) to x[1].
+    let lx = this.x[1]
+    let h = this.h[0] + this.h[1]
+    let ly = h / n
+    let m = (this.h[1] / n) / (this.x[1] - this.x[0])
+    var firstX;
+    if (m === 0) {
+      // No slope, just start at x[0].
+      firstX = this.x[0]
+      s.next = {
+        x: firstX,
+        f: new ConstFunc(ly),
+        next: null
+      }
+    } else {
+      let b = ly - m * lx
+      firstX = -b / m
+      s.next = {
+        x: firstX,
+        f: new PolyFunc([m, b]),
+        next: null
+      }
+    }
+    s = s.next
+
+    // Now find the line segments for the rest of the points.
+    for (let i = 2; i < this.n; i++) {
       const xx = this.x[i]
       h += this.h[i]
-      const yy = h / (n + 1)
+      const yy = h / n
       s.next = {
         x: lx,
         f: linearFunction(lx, ly, xx, yy),
@@ -232,20 +257,17 @@ export class ECDF implements CDF {
       lx = xx
       ly = yy
     }
+
+    // End with a horizontal line at y=1.
     s.next = {
       x: lx,
-      f: linearFunction(lx, ly, lx + 2, 1),
-      next: {
-        x: lx + 2,
-        f: new ConstFunc(1),
-        next: null
-      }
+      f: new ConstFunc(1),
+      next: null
     }
     return {
       segments: root,
-      minX: this.x[0] - 2,
-      maxX: lx + 2,
-      maxY: 1
+      minX: firstX,
+      maxX: lx
     }
   }
 
@@ -290,8 +312,7 @@ export class ECDF implements CDF {
     return {
       segments: root,
       minX: frontX,
-      maxX: backX,
-      maxY: 1
+      maxX: backX
     }
   }
 
