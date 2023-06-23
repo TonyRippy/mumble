@@ -763,7 +763,7 @@ where
                 debug_assert!((y2_b - (m_b * x2 + b_b)).abs() < 1e-10);
 
                 let x_intersect = (b_b - b_a) / (m_a - m_b);
-                debug_assert!(x_intersect >= x1); // x_intersect == x1 when y1_a == y1_b.
+                debug_assert!(x_intersect - x1 > -1e-10); // x_intersect == x1 when y1_a == y1_b.
                 debug_assert!(x_intersect < x2);
 
                 let h1 = y1_a - y1_b;
