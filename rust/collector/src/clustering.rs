@@ -19,19 +19,13 @@ impl DataStore {
         })
     }
 
-    fn write_cluster(
-        &self,
-        id: usize,
-        centroid: &InterpolatedECDF<f64>,
-        eps: f64,
-    ) -> sqlite::Result<()> {
+    fn write_cluster(&self, id: usize, centroid: &InterpolatedECDF<f64>) -> sqlite::Result<()> {
         let rmp = rmp_serde::to_vec(centroid).expect("serialize centroid");
         let mut statement = self
             .connection
-            .prepare("INSERT INTO cluster (id, group_id, centroid, eps) VALUES (?, 1, ?, ?)")?;
+            .prepare("INSERT INTO cluster (id, group_id, centroid) VALUES (?, 1, ?)")?;
         statement.bind((1, id as i64))?;
         statement.bind((2, &rmp as &[u8]))?;
-        statement.bind((3, eps))?;
         statement.next()?;
         Ok(())
     }
@@ -66,8 +60,8 @@ impl DataStore {
         // Write out any new clusters
         let new_max = self.cluster_group.centroids.len();
         for cluster_id in self.cluster_max..new_max {
-            let (centroid, eps) = &self.cluster_group.centroids[cluster_id];
-            self.write_cluster(cluster_id, centroid, *eps)
+            let centroid = &self.cluster_group.centroids[cluster_id];
+            self.write_cluster(cluster_id, centroid)
                 .expect("write cluster");
         }
         self.cluster_max = new_max;
@@ -98,7 +92,7 @@ impl Assignment {
 }
 
 struct ClusterGroup {
-    centroids: Vec<(InterpolatedECDF<f64>, f64)>,
+    centroids: Vec<InterpolatedECDF<f64>>,
     eps: f64,
 }
 
@@ -153,7 +147,7 @@ impl ClusterGroup {
         let mut neighbors = Vec::new();
         let mut cluster = 0;
 
-        for (centroid, _) in self.centroids.iter() {
+        for centroid in self.centroids.iter() {
             // Seed the run with known clusters
             neighbors.clear();
             neighbors.extend(Self::find_neighbors(
@@ -217,7 +211,7 @@ impl ClusterGroup {
             // } else {
             //     self.eps
             // };
-            self.centroids.push((centroid, self.eps));
+            self.centroids.push(centroid);
         }
         for (i, cluster) in new_clusters.into_iter().enumerate() {
             let cluster_id = i + offset;
