@@ -324,7 +324,7 @@ class App {
       'p = ' + select.p;
 
     // Render it
-    this.cdfGraph.layers[1] = new Layer(
+    this.cdfGraph.setLayer(1, new Layer(
       getRenderFuncForFunction(
         (x) => {
           return g.p(x);
@@ -341,8 +341,7 @@ class App {
         g: 190,
         b: 0,
         a: 64,
-      });
-    this.cdfGraph.draw();
+      }));
   }
 
   public start(sample: number[]) {
@@ -395,7 +394,7 @@ class App {
     graph.setRangeX(p.minX - xMargin, p.maxX + xMargin);
 
     // Render this as an image.
-    graph.layers[0] = new Layer(
+    graph.setLayer(0, new Layer(
       getRenderFuncForPlot(p),
       { // line
         r: 0,
@@ -408,10 +407,10 @@ class App {
         g: 0,
         b: 255,
         a: 128,
-      });
+      }));
 
     let g = select.cdf;
-    graph.layers[1] = new Layer(
+    graph.setLayer(1, new Layer(
       getRenderFuncForFunction(
         (x) => {
           return g.p(x);
@@ -428,8 +427,7 @@ class App {
         g: 190,
         b: 0,
         a: 64,
-      });
-    graph.draw();
+      }));
   }
 }
 
